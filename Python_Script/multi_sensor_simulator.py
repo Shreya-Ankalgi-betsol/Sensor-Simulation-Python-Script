@@ -66,7 +66,7 @@ import socket
 import json
 import threading
 import time
-from sensors import RadarSensor, LidarSensor
+from Model.sensors import RadarSensor, LidarSensor
 
 HOST = "127.0.0.1"
 PORT = 9000
@@ -105,4 +105,4 @@ for sensor in sensors:
 
 
 while True:
-    time.sleep(1)
+    time.sleep(5)
