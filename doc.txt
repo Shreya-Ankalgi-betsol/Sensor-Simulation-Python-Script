@@ -1,0 +1,36 @@
+📌 Project – Initial Sensor Simulation (Phase 1)
+
+In this initial phase of the project, we implemented a basic real-time multi-sensor 
+simulation system using Python. The goal was to simulate Radar and LiDAR sensors 
+and transmit their data continuously to a centralized server using TCP communication. 
+This serves as the foundation for building a larger real-time monitoring and threat 
+detection system.
+
+We used Object-Oriented Programming (OOP) to model sensors properly. A base Sensor 
+class was created to store common attributes like sensor ID and location (latitude 
+and longitude). Two child classes, RadarSensor and LidarSensor, inherit from this 
+base class and implement their own generate_data() methods. This allows each sensor 
+type to produce different data formats while maintaining a clean and scalable design.
+
+The system dynamically creates sensors based on user input from the command line.
+Each sensor runs in its own thread and continuously generates simulated telemetry 
+data such as range, angle, velocity (for radar) or point cloud data (for LiDAR). 
+This data is converted to JSON format and transmitted over TCP to a local server.
+
+The TCP server listens for multiple sensor connections simultaneously. For every
+connected sensor, it creates a separate thread to receive and decode incoming
+data. The server then prints the received data, confirming successful real-time 
+streaming and communication.
+
+🔹 What Is Happening in This Phase
+
+Sensors are created dynamically based on user input.
+
+Radar and LiDAR sensors generate different types of simulated data.
+
+Each sensor runs concurrently using multi-threading.
+
+Data is continuously transmitted over TCP sockets.
+
+The server receives and processes multiple sensor streams simultaneously.
+

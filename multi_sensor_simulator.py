@@ -78,7 +78,6 @@ sensors = []
 
 for i in range(num):
     sensor_type = input(f"Enter type for sensor {i+1} (RADAR/LIDAR): ").upper()
-
     latitude = 23.02 + i * 0.001
     longitude = 72.57 + i * 0.001
 
@@ -91,13 +90,29 @@ for i in range(num):
 
 
 def sensor_thread(sensor):
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client.connect((HOST, PORT))
-
     while True:
-        data = sensor.generate_data()
-        client.sendall(json.dumps(data).encode())
-        time.sleep(2)
+        try:
+            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client.connect((HOST, PORT))
+
+            while True:
+                try:
+                    data = sensor.generate_data()
+                    client.sendall(json.dumps(data).encode())
+                    time.sleep(2)
+                except (ConnectionAbortedError, ConnectionResetError) as ce:
+                    print(f"Connection error for {sensor.sensor_id}: {ce}")
+                    break
+                except Exception as e:
+                    print(f"Error sending data from {sensor.sensor_id}: {e}")
+                    break
+                    
+        except ConnectionRefusedError:
+            print(f"Cannot connect to server for {sensor.sensor_id}. Retrying in 5 seconds...")
+            time.sleep(5)
+        except Exception as e:
+            print(f"Fatal error in {sensor.sensor_id}: {e}")
+            time.sleep(5)
 
 
 for sensor in sensors:
