@@ -8,15 +8,16 @@ class LidarDetector(BaseDetector):
 
     def __init__(
         self,
-        large_volume_threshold: float = 5.0,
-        dense_point_threshold: int = 100,
-        moving_velocity_threshold: float = 0.5,
-        tall_height_threshold: float = 1.5,
-        wide_width_threshold: float = 2.0,
-        high_density_threshold: float = 40.0,
-        min_point_count: int = 10,
-        velocity_noise_floor: float = 0.1,
+        large_volume_threshold: float,
+        dense_point_threshold: int,
+        moving_velocity_threshold: float,
+        tall_height_threshold: float,
+        wide_width_threshold: float,
+        high_density_threshold: float,
+        min_point_count: int,
+        velocity_noise_floor: float,
     ):
+        # Explicit configuration (no defaults)
         self.large_volume_threshold = large_volume_threshold
         self.dense_point_threshold = dense_point_threshold
         self.moving_velocity_threshold = moving_velocity_threshold
@@ -26,8 +27,11 @@ class LidarDetector(BaseDetector):
         self.min_point_count = min_point_count
         self.velocity_noise_floor = velocity_noise_floor
 
+    # Main Detection Logic
+
     def detect(self, raw: Dict[str, Any]) -> List[Dict[str, Any]]:
 
+        # Validate physical correctness
         self._validate_lidar_physics(raw)
 
         bbox = raw["bounding_box"]
@@ -41,15 +45,13 @@ class LidarDetector(BaseDetector):
         density = raw["point_density_ppm2"]
         velocity = raw["velocity_mps"]
 
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
         # Reject low-point noise clusters
         if point_count < self.min_point_count:
             return detections
 
-        # ------------------------
         # 1️⃣ LARGE OBJECT
-        # ------------------------
         score = 0.0
 
         if volume > self.large_volume_threshold:
@@ -62,12 +64,18 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-                self._build_object("LIDAR_OBJECT_LARGE", score, volume, point_count)
+                self._build_object(
+                    "LIDAR_OBJECT_LARGE",
+                    score,
+                    {
+                        "volume": volume,
+                        "point_count": point_count,
+                        "density": density,
+                    },
+                )
             )
 
-        # ------------------------
         # 2️⃣ DENSE OBJECT
-        # ------------------------
         score = 0.0
 
         if point_count > self.dense_point_threshold:
@@ -80,12 +88,18 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-                self._build_object("LIDAR_OBJECT_DENSE", score, volume, point_count)
+                self._build_object(
+                    "LIDAR_OBJECT_DENSE",
+                    score,
+                    {
+                        "point_count": point_count,
+                        "density": density,
+                        "volume": volume,
+                    },
+                )
             )
 
-        # ------------------------
         # 3️⃣ MOVING OBJECT
-        # ------------------------
         score = 0.0
 
         if abs(velocity) > self.moving_velocity_threshold:
@@ -95,19 +109,25 @@ class LidarDetector(BaseDetector):
         if density > self.high_density_threshold:
             score += 0.2
 
-        # Damp small velocities
+        # Damp near-zero velocities (noise handling)
         if abs(velocity) < self.velocity_noise_floor:
             score *= 0.7
 
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-                self._build_object("LIDAR_OBJECT_MOVING", score, volume, point_count)
+                self._build_object(
+                    "LIDAR_OBJECT_MOVING",
+                    score,
+                    {
+                        "velocity": velocity,
+                        "point_count": point_count,
+                        "density": density,
+                    },
+                )
             )
 
-        # ------------------------
         # 4️⃣ TALL OBJECT
-        # ------------------------
         score = 0.0
 
         if height > self.tall_height_threshold:
@@ -118,12 +138,17 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-                self._build_object("LIDAR_OBJECT_TALL", score, volume, point_count)
+                self._build_object(
+                    "LIDAR_OBJECT_TALL",
+                    score,
+                    {
+                        "height": height,
+                        "volume": volume,
+                    },
+                )
             )
 
-        # ------------------------
         # 5️⃣ WIDE OBJECT
-        # ------------------------
         score = 0.0
 
         if width > self.wide_width_threshold:
@@ -134,12 +159,17 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-                self._build_object("LIDAR_OBJECT_WIDE", score, volume, point_count)
+                self._build_object(
+                    "LIDAR_OBJECT_WIDE",
+                    score,
+                    {
+                        "width": width,
+                        "volume": volume,
+                    },
+                )
             )
 
-        # ------------------------
         # 6️⃣ HIGH POINT DENSITY
-        # ------------------------
         score = 0.0
 
         if density > self.high_density_threshold:
@@ -150,23 +180,25 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-                self._build_object("LIDAR_OBJECT_HIGH_POINT_DENSITY", score, volume, point_count)
+                self._build_object(
+                    "LIDAR_OBJECT_HIGH_POINT_DENSITY",
+                    score,
+                    {
+                        "density": density,
+                        "point_count": point_count,
+                    },
+                )
             )
 
         return detections
 
-    # ------------------------------------
     # Helper Methods
-    # ------------------------------------
 
-    def _build_object(self, object_type: str, score: float, volume: float, point_count: int):
+    def _build_object(self, object_type: str, score: float, metadata: Dict[str, Any]):
         return {
             "type": object_type,
             "confidence": score,
-            "metadata": {
-                "volume": volume,
-                "point_count": point_count,
-            },
+            "metadata": metadata,
         }
 
     def _validate_lidar_physics(self, raw: Dict[str, Any]):

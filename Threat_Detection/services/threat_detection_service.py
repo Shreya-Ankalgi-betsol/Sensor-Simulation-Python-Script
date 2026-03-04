@@ -59,9 +59,7 @@ class ThreatDetectionService:
         except Exception as e:
             return self._error_response(payload, str(e))
 
-    # ------------------------------------
-    # Logging & Error Handling
-    # ------------------------------------
+    
 
     def _log_detection(self, result: Dict[str, Any]) -> None:
         """

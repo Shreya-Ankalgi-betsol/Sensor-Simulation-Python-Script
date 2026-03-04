@@ -78,7 +78,7 @@ def simulate_stream():
         print("OUTPUT:", result)
         print("-" * 80)
 
-        time.sleep(1)  # simulate 1 Hz sensor
+        time.sleep(5)  # simulate 1 Hz sensor
 
 
 if __name__ == "__main__":
