@@ -36,20 +36,22 @@
 
 
 
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import socket
 import json
 import threading
-from database import init_db, insert_radar_reading, insert_lidar_reading
+import sys
+import os
+
+# Allow importing database.py if server is inside another folder
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from database import init_db, register_sensor, insert_radar_reading, insert_lidar_reading
+
 HOST = "127.0.0.1"
 PORT = 9000
 
-# Initialize database once when server starts
+# Initialize database
 init_db()
-
 
 def handle_client(conn, addr):
     print("Connected by", addr)
@@ -66,20 +68,24 @@ def handle_client(conn, addr):
             print("Received:", message)
 
             try:
-                if message.get("sensor_type") == "RADAR":
+                # Register sensor metadata
+                register_sensor(message)
+
+                # Insert sensor reading
+                if message.get("type") == "radar":
                     insert_radar_reading(message)
 
-                elif message.get("sensor_type") == "LIDAR":
+                elif message.get("type") == "lidar":
                     insert_lidar_reading(message)
-                    
+
             except Exception as db_error:
                 print("Database error:", db_error)
-                # Continue processing other messages instead of breaking
                 continue
 
         except json.JSONDecodeError as je:
             print("JSON decode error:", je)
             continue
+
         except Exception as e:
             print("Error:", e)
             break
@@ -88,6 +94,7 @@ def handle_client(conn, addr):
         conn.close()
     except:
         pass
+
     print("Connection closed:", addr)
 
 
@@ -99,7 +106,12 @@ server.listen()
 print(f"TCP Server listening on {HOST}:{PORT}")
 
 
-# Accept clients continuously
+# Accept clients
 while True:
     conn, addr = server.accept()
-    threading.Thread(target=handle_client, args=(conn, addr)).start()
+
+    threading.Thread(
+        target=handle_client,
+        args=(conn, addr),
+        daemon=True
+    ).start()

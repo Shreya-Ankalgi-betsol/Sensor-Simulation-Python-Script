@@ -16,12 +16,12 @@ class ThreatDetectionService:
         # Initialize detectors with configurable thresholds
         self.detectors = {
             "radar": RadarDetector(
-                velocity_threshold=1.0,
-                fast_approach_threshold=3.0,
-                rcs_threshold=20.0,
-                strong_signal_threshold=15.0,
-                snr_noise_floor=5.0,
-                stationary_velocity_epsilon=0.2,
+                velocity_threshold=0.5,
+                fast_approach_threshold=2.0,
+                rcs_threshold=15.0,
+                strong_signal_threshold=10.0,
+                snr_noise_floor=3.0,
+                stationary_velocity_epsilon=0.1,
             ),
             "lidar": LidarDetector(
                 large_volume_threshold=5.0,

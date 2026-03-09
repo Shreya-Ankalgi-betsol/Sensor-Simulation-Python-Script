@@ -1,47 +1,59 @@
 import sqlite3
+import json
 
 DB_NAME = "sensor_data.db"
 
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
-    cursor = conn.cursor()
+    cursor = conn.cursor()   #A cursor is an object used to execute SQL queries and fetch results from the database.
 
     # Sensors table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS sensors (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         sensor_id TEXT UNIQUE,
-        sensor_type TEXT,
-        latitude REAL,
-        longitude REAL
+        sensor_type TEXT
     )
     """)
 
-    # Radar table
+    # Radar readings
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS radar_readings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         sensor_id TEXT,
-        range_m REAL,
-        angle_deg REAL,
-        velocity_mps REAL,
-        signal_strength REAL,
-        gpu_usage_percent REAL,
+        raw_detection TEXT,
         timestamp TEXT
     )
     """)
 
-    # LiDAR table
+    # LiDAR readings
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS lidar_readings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         sensor_id TEXT,
-        points TEXT,
-        gpu_usage_percent REAL,
+        raw_detection TEXT,
         timestamp TEXT
     )
     """)
+
+    conn.commit()
+    conn.close()
+
+
+# Register sensor if not already stored
+def register_sensor(message):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT OR IGNORE INTO sensors
+    (sensor_id, sensor_type)
+    VALUES (?, ?)
+    """, (
+        message["sensor_id"],
+        message["type"]
+    ))
 
     conn.commit()
     conn.close()
@@ -51,17 +63,15 @@ def insert_radar_reading(message):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
+    raw_detection_json = json.dumps(message["raw_detection"])
+
     cursor.execute("""
     INSERT INTO radar_readings
-    (sensor_id, range_m, angle_deg, velocity_mps, signal_strength, gpu_usage_percent, timestamp)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    (sensor_id, raw_detection, timestamp)
+    VALUES (?, ?, ?)
     """, (
         message["sensor_id"],
-        message["range_m"],
-        message["angle_deg"],
-        message["velocity_mps"],
-        message["signal_strength"],
-        message["gpu_usage_percent"],
+        raw_detection_json,
         message["timestamp"]
     ))
 
@@ -73,18 +83,17 @@ def insert_lidar_reading(message):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
+    raw_detection_json = json.dumps(message["raw_detection"])
+
     cursor.execute("""
     INSERT INTO lidar_readings
-    (sensor_id, points, gpu_usage_percent, timestamp)
-    VALUES (?, ?, ?, ?)
+    (sensor_id, raw_detection, timestamp)
+    VALUES (?, ?, ?)
     """, (
         message["sensor_id"],
-        json.dumps(message["points"]),
-        message["gpu_usage_percent"],
+        raw_detection_json,
         message["timestamp"]
     ))
 
     conn.commit()
     conn.close()
-
-
