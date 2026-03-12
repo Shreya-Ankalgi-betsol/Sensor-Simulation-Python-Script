@@ -8,13 +8,14 @@ class RadarDetector(BaseDetector):
 
     def __init__(
         self,
-        velocity_threshold: float = 1.0,
-        fast_approach_threshold: float = 3.0,
-        rcs_threshold: float = 20.0,
-        strong_signal_threshold: float = 15.0,
-        snr_noise_floor: float = 5.0,
-        stationary_velocity_epsilon: float = 0.2,
+        velocity_threshold: float,
+        fast_approach_threshold: float,
+        rcs_threshold: float,
+        strong_signal_threshold: float,
+        snr_noise_floor: float,
+        stationary_velocity_epsilon: float,
     ):
+        # Explicit configuration (no defaults)
         self.velocity_threshold = velocity_threshold
         self.fast_approach_threshold = fast_approach_threshold
         self.rcs_threshold = rcs_threshold
@@ -22,19 +23,23 @@ class RadarDetector(BaseDetector):
         self.snr_noise_floor = snr_noise_floor
         self.stationary_velocity_epsilon = stationary_velocity_epsilon
 
-    def detect(self, raw_detection: Dict[str, Any]) -> List[Dict[str, Any]]:
+    
+    # Main Detection Logic
+    
+    def detect(self, raw: Dict[str, Any]) -> List[Dict[str, Any]]:
 
-        self._validate_radar_physics(raw_detection)
+        self._validate_radar_physics(raw)
 
-        velocity = raw_detection["radial_velocity_mps"]
-        rcs = raw_detection["rcs_dbsm"]
-        snr = raw_detection["snr_db"]
+        velocity = raw["radial_velocity_mps"]
+        rcs = raw["rcs_dbsm"]
+        snr = raw["snr_db"]
+        range_m = raw["range_m"]
 
-        detections = []
+        detections: List[Dict[str, Any]] = []
 
-        # ------------------------
-        # 1️⃣ MOVING OBJECT
-        # ------------------------
+        
+        # MOVING OBJECT
+        
         score = 0.0
 
         if abs(velocity) > self.velocity_threshold:
@@ -49,12 +54,21 @@ class RadarDetector(BaseDetector):
 
         if self._should_detect(score):
             detections.append(
-                self._build_object("RADAR_OBJECT_MOVING", score, velocity, rcs)
+                self._build_object(
+                    "RADAR_OBJECT_MOVING",
+                    score,
+                    {
+                        "velocity": velocity,
+                        "rcs": rcs,
+                        "snr": snr,
+                        "range": range_m,
+                    },
+                )
             )
 
-        # ------------------------
-        # 2️⃣ FAST APPROACHING
-        # ------------------------
+        
+        #  FAST APPROACHING OBJECT
+        
         score = 0.0
 
         if velocity < -self.fast_approach_threshold:
@@ -69,12 +83,20 @@ class RadarDetector(BaseDetector):
 
         if self._should_detect(score):
             detections.append(
-                self._build_object("RADAR_OBJECT_FAST_APPROACHING", score, velocity, rcs)
+                self._build_object(
+                    "RADAR_OBJECT_FAST_APPROACHING",
+                    score,
+                    {
+                        "velocity": velocity,
+                        "snr": snr,
+                        "rcs": rcs,
+                        "range": range_m,
+                    },
+                )
             )
 
-        # ------------------------
-        # 3️⃣ HIGH RCS
-        # ------------------------
+       
+        #  HIGH RCS OBJECT
         score = 0.0
 
         if rcs > self.rcs_threshold:
@@ -87,12 +109,18 @@ class RadarDetector(BaseDetector):
 
         if self._should_detect(score):
             detections.append(
-                self._build_object("RADAR_OBJECT_HIGH_RCS", score, velocity, rcs)
+                self._build_object(
+                    "RADAR_OBJECT_HIGH_RCS",
+                    score,
+                    {
+                        "rcs": rcs,
+                        "snr": snr,
+                        "range": range_m,
+                    },
+                )
             )
 
-        # ------------------------
-        # 4️⃣ STATIONARY LARGE
-        # ------------------------
+        # STATIONARY LARGE OBJECT
         score = 0.0
 
         if abs(velocity) < self.stationary_velocity_epsilon:
@@ -107,28 +135,40 @@ class RadarDetector(BaseDetector):
 
         if self._should_detect(score):
             detections.append(
-                self._build_object("RADAR_OBJECT_STATIONARY_LARGE", score, velocity, rcs)
+                self._build_object(
+                    "RADAR_OBJECT_STATIONARY_LARGE",
+                    score,
+                    {
+                        "velocity": velocity,
+                        "rcs": rcs,
+                        "snr": snr,
+                        "range": range_m,
+                    },
+                )
             )
 
         return detections
 
-    # ------------------------------------
     # Helper Methods
-    # ------------------------------------
 
     def _apply_noise_penalty(self, score: float, snr: float) -> float:
+        """
+        Reduce confidence if signal-to-noise ratio is too low.
+        """
         if snr < self.snr_noise_floor:
             return score * 0.7
         return score
 
-    def _build_object(self, object_type: str, score: float, velocity: float, rcs: float):
+    def _build_object(
+        self,
+        object_type: str,
+        score: float,
+        metadata: Dict[str, Any],
+    ):
         return {
             "type": object_type,
             "confidence": score,
-            "metadata": {
-                "velocity": velocity,
-                "rcs": rcs,
-            },
+            "metadata": metadata,
         }
 
     def _validate_radar_physics(self, raw: Dict[str, Any]):
