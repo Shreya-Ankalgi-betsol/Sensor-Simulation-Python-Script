@@ -2,6 +2,7 @@
 
 from typing import Dict, Any, List
 from .base_detector import BaseDetector
+from .severity_engine import SeverityEngine
 
 
 class RadarDetector(BaseDetector):
@@ -16,6 +17,7 @@ class RadarDetector(BaseDetector):
         stationary_velocity_epsilon: float = 0.2,
     ):
         self.velocity_threshold = velocity_threshold
+        self.severity_engine = SeverityEngine()
         self.fast_approach_threshold = fast_approach_threshold
         self.rcs_threshold = rcs_threshold
         self.strong_signal_threshold = strong_signal_threshold
@@ -29,6 +31,7 @@ class RadarDetector(BaseDetector):
         velocity = raw_detection["radial_velocity_mps"]
         rcs = raw_detection["rcs_dbsm"]
         snr = raw_detection["snr_db"]
+        range_m = raw_detection["range_m"]
 
         detections = []
 
@@ -38,79 +41,134 @@ class RadarDetector(BaseDetector):
         score = 0.0
 
         if abs(velocity) > self.velocity_threshold:
-            score += 0.4
+            score += 0.3
+
         if rcs > self.rcs_threshold:
-            score += 0.3
+            score += 0.2
+
         if snr > self.strong_signal_threshold:
-            score += 0.3
+            score += 0.2
+
+        score += self._distance_risk(range_m)
 
         score = self._apply_noise_penalty(score, snr)
         score = self._normalize_score(score)
 
         if self._should_detect(score):
             detections.append(
-                self._build_object("RADAR_OBJECT_MOVING", score, velocity, rcs)
+                self._build_object(
+                    "RADAR_OBJECT_MOVING", score, velocity, rcs, range_m
+                )
             )
 
         # ------------------------
-        # 2️⃣ FAST APPROACHING
+        # 2️⃣ FAST APPROACHING OBJECT
         # ------------------------
         score = 0.0
 
         if velocity < -self.fast_approach_threshold:
-            score += 0.5
+            score += 0.4
+
         if snr > self.strong_signal_threshold:
-            score += 0.3
+            score += 0.2
+
         if rcs > self.rcs_threshold:
             score += 0.2
+
+        score += self._distance_risk(range_m)
 
         score = self._apply_noise_penalty(score, snr)
         score = self._normalize_score(score)
 
         if self._should_detect(score):
             detections.append(
-                self._build_object("RADAR_OBJECT_FAST_APPROACHING", score, velocity, rcs)
+                self._build_object(
+                    "RADAR_OBJECT_FAST_APPROACHING",
+                    score,
+                    velocity,
+                    rcs,
+                    range_m,
+                )
             )
 
         # ------------------------
-        # 3️⃣ HIGH RCS
+        # 3️⃣ HIGH RCS OBJECT
         # ------------------------
         score = 0.0
 
         if rcs > self.rcs_threshold:
-            score += 0.6
+            score += 0.5
+
         if snr > self.strong_signal_threshold:
-            score += 0.4
+            score += 0.2
+
+        score += self._distance_risk(range_m)
 
         score = self._apply_noise_penalty(score, snr)
         score = self._normalize_score(score)
 
         if self._should_detect(score):
             detections.append(
-                self._build_object("RADAR_OBJECT_HIGH_RCS", score, velocity, rcs)
+                self._build_object(
+                    "RADAR_OBJECT_HIGH_RCS",
+                    score,
+                    velocity,
+                    rcs,
+                    range_m,
+                )
             )
 
         # ------------------------
-        # 4️⃣ STATIONARY LARGE
+        # 4️⃣ STATIONARY LARGE OBJECT
         # ------------------------
         score = 0.0
 
         if abs(velocity) < self.stationary_velocity_epsilon:
-            score += 0.4
+            score += 0.3
+
         if rcs > self.rcs_threshold:
-            score += 0.4
+            score += 0.3
+
         if snr > self.strong_signal_threshold:
-            score += 0.2
+            score += 0.1
+
+        score += self._distance_risk(range_m)
 
         score = self._apply_noise_penalty(score, snr)
         score = self._normalize_score(score)
 
         if self._should_detect(score):
             detections.append(
-                self._build_object("RADAR_OBJECT_STATIONARY_LARGE", score, velocity, rcs)
+                self._build_object(
+                    "RADAR_OBJECT_STATIONARY_LARGE",
+                    score,
+                    velocity,
+                    rcs,
+                    range_m,
+                )
             )
 
         return detections
+
+    # ------------------------------------
+    # Distance Risk Model (NEW)
+    # ------------------------------------
+
+    def _distance_risk(self, range_m: float) -> float:
+        """
+        Adds risk weight based on object distance.
+        Closer objects increase detection confidence.
+        """
+
+        if range_m < 5:
+            return 0.4
+        elif range_m < 10:
+            return 0.3
+        elif range_m < 20:
+            return 0.2
+        elif range_m < 50:
+            return 0.1
+        return 0.0
 
     # ------------------------------------
     # Helper Methods
@@ -121,13 +179,27 @@ class RadarDetector(BaseDetector):
             return score * 0.7
         return score
 
-    def _build_object(self, object_type: str, score: float, velocity: float, rcs: float):
+    def _build_object(
+        self,
+        object_type: str,
+        score: float,
+        velocity: float,
+        rcs: float,
+        range_m: float,
+    ):
+        severity = self.severity_engine.classify(
+        confidence=score,
+        distance=range_m,
+        velocity=velocity,
+        )
         return {
             "type": object_type,
             "confidence": score,
+            "severity": severity,
             "metadata": {
                 "velocity": velocity,
                 "rcs": rcs,
+                "range_m": range_m,
             },
         }
 

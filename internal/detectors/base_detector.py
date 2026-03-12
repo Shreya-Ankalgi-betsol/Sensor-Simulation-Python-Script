@@ -87,7 +87,7 @@ class BaseDetector(ABC):
 
         return {
             "sensor_id": payload["sensor_id"],
-            "sensor_type": payload["type"],
+            "sensor_type": str(payload["type"]).upper(),
             "timestamp": payload["timestamp"],
             "detected_objects": detected_objects,
         }

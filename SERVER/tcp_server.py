@@ -49,12 +49,49 @@ from database import init_db, register_sensor, insert_radar_reading, insert_lida
 
 HOST = "127.0.0.1"
 PORT = 9000
+THREAT_HOST = "127.0.0.1"
+THREAT_PORT = 9100
+threat_socket = None
+threat_socket_lock = threading.Lock()
 
 # Initialize database
 init_db()
 
+
+def forward_to_threat_detection(message):
+    global threat_socket
+
+    payload = (json.dumps(message) + "\n").encode()
+
+    with threat_socket_lock:
+        try:
+            if threat_socket is None:
+                threat_socket = socket.create_connection((THREAT_HOST, THREAT_PORT), timeout=1)
+
+            threat_socket.sendall(payload)
+            return
+        except Exception:
+            try:
+                if threat_socket is not None:
+                    threat_socket.close()
+            except Exception:
+                pass
+            threat_socket = None
+
+        try:
+            threat_socket = socket.create_connection((THREAT_HOST, THREAT_PORT), timeout=1)
+            threat_socket.sendall(payload)
+        except Exception:
+            try:
+                if threat_socket is not None:
+                    threat_socket.close()
+            except Exception:
+                pass
+            threat_socket = None
+
 def handle_client(conn, addr):
     print("Connected by", addr)
+    buffer = ""
 
     while True:
         try:
@@ -63,24 +100,36 @@ def handle_client(conn, addr):
             if not data:
                 break
 
-            message = json.loads(data.decode())
+            buffer += data.decode()
 
-            print("Received:", message)
+            while "\n" in buffer:
+                raw_message, buffer = buffer.split("\n", 1)
+                raw_message = raw_message.strip()
 
-            try:
-                # Register sensor metadata
-                register_sensor(message)
+                if not raw_message:
+                    continue
 
-                # Insert sensor reading
-                if message.get("type") == "radar":
-                    insert_radar_reading(message)
+                try:
+                    message = json.loads(raw_message)
+                except json.JSONDecodeError as je:
+                    print("JSON decode error:", je)
+                    continue
 
-                elif message.get("type") == "lidar":
-                    insert_lidar_reading(message)
+                print("Received:", message)
 
-            except Exception as db_error:
-                print("Database error:", db_error)
-                continue
+                try:
+                    register_sensor(message)
+
+                    if message.get("type") == "radar":
+                        insert_radar_reading(message)
+                    elif message.get("type") == "lidar":
+                        insert_lidar_reading(message)
+
+                    forward_to_threat_detection(message)
+
+                except Exception as db_error:
+                    print("Database error:", db_error)
+                    continue
 
         except json.JSONDecodeError as je:
             print("JSON decode error:", je)

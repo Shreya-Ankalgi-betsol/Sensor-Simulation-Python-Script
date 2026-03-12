@@ -75,22 +75,21 @@ from Model.sensors import RadarSensor, LidarSensor
 HOST = "127.0.0.1"
 PORT = 9000
 
-# Ask user how many sensors
-num = int(input("How many sensors? "))
-
 sensors = []
 
-for i in range(num):
-    sensor_type = input(f"Enter type for sensor {i+1} (RADAR/LIDAR): ").upper()
-    latitude = 23.02 + i * 0.001
-    longitude = 72.57 + i * 0.001
+# Ask user sensor counts by type
+radar_count = int(input("How many RADAR sensors? "))
+lidar_count = int(input("How many LIDAR sensors? "))
 
-    if sensor_type == "RADAR":
-        sensor = RadarSensor(f"RADAR_{i+1}", latitude, longitude)
-    else:
-        sensor = LidarSensor(f"LIDAR_{i+1}", latitude, longitude)
+for index in range(radar_count):
+    latitude = 23.02 + index * 0.001
+    longitude = 72.57 + index * 0.001
+    sensors.append(RadarSensor(f"RADAR_{index+1}", latitude, longitude))
 
-    sensors.append(sensor)
+for index in range(lidar_count):
+    latitude = 23.05 + index * 0.001
+    longitude = 72.60 + index * 0.001
+    sensors.append(LidarSensor(f"LIDAR_{index+1}", latitude, longitude))
 
 
 def sensor_thread(sensor):
@@ -102,7 +101,7 @@ def sensor_thread(sensor):
             while True:
                 try:
                     data = sensor.generate_data()
-                    client.sendall(json.dumps(data).encode())
+                    client.sendall((json.dumps(data) + "\n").encode())
                     time.sleep(2)
                 except (ConnectionAbortedError, ConnectionResetError) as ce:
                     print(f"Connection error for {sensor.sensor_id}: {ce}")

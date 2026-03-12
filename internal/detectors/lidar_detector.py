@@ -2,6 +2,7 @@
 
 from typing import Dict, Any, List
 from .base_detector import BaseDetector
+from .severity_engine import SeverityEngine
 
 
 class LidarDetector(BaseDetector):
@@ -25,6 +26,7 @@ class LidarDetector(BaseDetector):
         self.high_density_threshold = high_density_threshold
         self.min_point_count = min_point_count
         self.velocity_noise_floor = velocity_noise_floor
+        self.severity_engine = SeverityEngine()
 
     def detect(self, raw: Dict[str, Any]) -> List[Dict[str, Any]]:
 
@@ -62,7 +64,7 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-                self._build_object("LIDAR_OBJECT_LARGE", score, volume, point_count)
+                self._build_object("LIDAR_OBJECT_LARGE", score, volume, point_count, velocity)
             )
 
         # ------------------------
@@ -80,7 +82,7 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-                self._build_object("LIDAR_OBJECT_DENSE", score, volume, point_count)
+                self._build_object("LIDAR_OBJECT_DENSE", score, volume, point_count, velocity)
             )
 
         # ------------------------
@@ -102,7 +104,7 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-                self._build_object("LIDAR_OBJECT_MOVING", score, volume, point_count)
+                self._build_object("LIDAR_OBJECT_MOVING", score, volume, point_count, velocity)
             )
 
         # ------------------------
@@ -118,7 +120,7 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-                self._build_object("LIDAR_OBJECT_TALL", score, volume, point_count)
+                self._build_object("LIDAR_OBJECT_TALL", score, volume, point_count, velocity)
             )
 
         # ------------------------
@@ -134,7 +136,7 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-                self._build_object("LIDAR_OBJECT_WIDE", score, volume, point_count)
+                self._build_object("LIDAR_OBJECT_WIDE", score, volume, point_count, velocity)
             )
 
         # ------------------------
@@ -150,7 +152,7 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-                self._build_object("LIDAR_OBJECT_HIGH_POINT_DENSITY", score, volume, point_count)
+                self._build_object("LIDAR_OBJECT_HIGH_POINT_DENSITY", score, volume, point_count, velocity)
             )
 
         return detections
@@ -159,13 +161,16 @@ class LidarDetector(BaseDetector):
     # Helper Methods
     # ------------------------------------
 
-    def _build_object(self, object_type: str, score: float, volume: float, point_count: int):
+    def _build_object(self, object_type: str, score: float, volume: float, point_count: int, velocity: float):
+        severity = self.severity_engine.classify(confidence=score, velocity=velocity)
         return {
             "type": object_type,
             "confidence": score,
+            "severity": severity,
             "metadata": {
                 "volume": volume,
                 "point_count": point_count,
+                "velocity_mps": velocity,
             },
         }
 
