@@ -51,7 +51,7 @@ class LidarDetector(BaseDetector):
         if point_count < self.min_point_count:
             return detections
 
-        # 1️⃣ LARGE OBJECT
+        #  LARGE OBJECT
         score = 0.0
 
         if volume > self.large_volume_threshold:
@@ -75,7 +75,7 @@ class LidarDetector(BaseDetector):
                 )
             )
 
-        # 2️⃣ DENSE OBJECT
+        #  DENSE OBJECT
         score = 0.0
 
         if point_count > self.dense_point_threshold:
@@ -99,7 +99,7 @@ class LidarDetector(BaseDetector):
                 )
             )
 
-        # 3️⃣ MOVING OBJECT
+        #  MOVING OBJECT
         score = 0.0
 
         if abs(velocity) > self.moving_velocity_threshold:
@@ -127,7 +127,7 @@ class LidarDetector(BaseDetector):
                 )
             )
 
-        # 4️⃣ TALL OBJECT
+        #  TALL OBJECT
         score = 0.0
 
         if height > self.tall_height_threshold:
@@ -148,7 +148,7 @@ class LidarDetector(BaseDetector):
                 )
             )
 
-        # 5️⃣ WIDE OBJECT
+        #  WIDE OBJECT
         score = 0.0
 
         if width > self.wide_width_threshold:
@@ -169,7 +169,7 @@ class LidarDetector(BaseDetector):
                 )
             )
 
-        # 6️⃣ HIGH POINT DENSITY
+        #  HIGH POINT DENSITY
         score = 0.0
 
         if density > self.high_density_threshold:

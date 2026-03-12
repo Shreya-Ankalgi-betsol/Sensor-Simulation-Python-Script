@@ -44,9 +44,7 @@ class BaseDetector(ABC):
         """
         pass
 
-    # -------------------------
     # Common Utility Functions
-    # -------------------------
 
     def _validate_payload_structure(self, payload: Dict[str, Any]) -> None:
         required_keys = {"sensor_id", "type", "timestamp", "raw_detection"}

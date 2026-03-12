@@ -38,7 +38,7 @@ class RadarDetector(BaseDetector):
         detections: List[Dict[str, Any]] = []
 
         
-        # 1️⃣ MOVING OBJECT
+        # MOVING OBJECT
         
         score = 0.0
 
@@ -67,7 +67,7 @@ class RadarDetector(BaseDetector):
             )
 
         
-        # 2️⃣ FAST APPROACHING OBJECT
+        #  FAST APPROACHING OBJECT
         
         score = 0.0
 
@@ -96,7 +96,7 @@ class RadarDetector(BaseDetector):
             )
 
        
-        # 3️⃣ HIGH RCS OBJECT
+        #  HIGH RCS OBJECT
         score = 0.0
 
         if rcs > self.rcs_threshold:
@@ -120,7 +120,7 @@ class RadarDetector(BaseDetector):
                 )
             )
 
-        # 4️⃣ STATIONARY LARGE OBJECT
+        # STATIONARY LARGE OBJECT
         score = 0.0
 
         if abs(velocity) < self.stationary_velocity_epsilon:
