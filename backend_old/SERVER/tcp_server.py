@@ -1,39 +1,4 @@
-# import socket
-# import json
-# import threading
-
-# HOST = "127.0.0.1"
-# PORT = 6000
-
-# server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-# server.bind((HOST, PORT))
-# server.listen()
-
-# print(f"TCP Server listening on {HOST}:{PORT}")
-
-# def handle_client(conn, addr):
-#     print("Connected by", addr)
-
-#     while True:
-#         try:
-#             data = conn.recv(4096)
-#             if not data:
-#                 break
-
-#             message = json.loads(data.decode())
-#             print("Received:", message)
-
-#         except Exception as e:
-#             print("Error:", e)
-#             break
-
-#     conn.close()
-#     print("Connection closed:", addr)
-
-# while True:
-#     conn, addr = server.accept()
-#     threading.Thread(target=handle_client, args=(conn, addr)).start()
-
+# segrigating db operations in db 
 
 
 import socket
@@ -42,10 +7,16 @@ import threading
 import sys
 import os
 
-# Allow importing database.py if server is inside another folder
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Allow importing modules from backend_old and project root
+current_dir = os.path.dirname(os.path.abspath(__file__))
+backend_old_root = os.path.dirname(current_dir)
+project_root = os.path.dirname(backend_old_root)
 
-from database import init_db, register_sensor, insert_radar_reading, insert_lidar_reading
+sys.path.insert(0, backend_old_root)
+sys.path.insert(0, project_root)
+
+from database import Database
+
 
 HOST = "127.0.0.1"
 PORT = 9000
@@ -55,7 +26,7 @@ threat_socket = None
 threat_socket_lock = threading.Lock()
 
 # Initialize database
-init_db()
+db = Database()
 
 
 def forward_to_threat_detection(message):
@@ -66,7 +37,8 @@ def forward_to_threat_detection(message):
     with threat_socket_lock:
         try:
             if threat_socket is None:
-                threat_socket = socket.create_connection((THREAT_HOST, THREAT_PORT), timeout=1)
+                threat_socket = socket.create_connection(
+                    (THREAT_HOST, THREAT_PORT), timeout=1)
 
             threat_socket.sendall(payload)
             return
@@ -79,7 +51,8 @@ def forward_to_threat_detection(message):
             threat_socket = None
 
         try:
-            threat_socket = socket.create_connection((THREAT_HOST, THREAT_PORT), timeout=1)
+            threat_socket = socket.create_connection(
+                (THREAT_HOST, THREAT_PORT), timeout=1)
             threat_socket.sendall(payload)
         except Exception:
             try:
@@ -88,6 +61,7 @@ def forward_to_threat_detection(message):
             except Exception:
                 pass
             threat_socket = None
+
 
 def handle_client(conn, addr):
     print("Connected by", addr)
@@ -118,12 +92,12 @@ def handle_client(conn, addr):
                 print("Received:", message)
 
                 try:
-                    register_sensor(message)
+                    db.register_sensor(message)
 
                     if message.get("type") == "radar":
-                        insert_radar_reading(message)
+                        db.insert_radar_reading(message)
                     elif message.get("type") == "lidar":
-                        insert_lidar_reading(message)
+                        db.insert_lidar_reading(message)
 
                     forward_to_threat_detection(message)
 

@@ -66,9 +66,6 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-<<<<<<<< HEAD:internal/detectors/lidar_detector.py
-                self._build_object("LIDAR_OBJECT_LARGE", score, volume, point_count, velocity)
-========
                 self._build_object(
                     "LIDAR_OBJECT_LARGE",
                     score,
@@ -78,7 +75,6 @@ class LidarDetector(BaseDetector):
                         "density": density,
                     },
                 )
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/lidar_detector.py
             )
 
         #  DENSE OBJECT
@@ -94,9 +90,6 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-<<<<<<<< HEAD:internal/detectors/lidar_detector.py
-                self._build_object("LIDAR_OBJECT_DENSE", score, volume, point_count, velocity)
-========
                 self._build_object(
                     "LIDAR_OBJECT_DENSE",
                     score,
@@ -106,7 +99,6 @@ class LidarDetector(BaseDetector):
                         "volume": volume,
                     },
                 )
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/lidar_detector.py
             )
 
         #  MOVING OBJECT
@@ -126,9 +118,6 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-<<<<<<<< HEAD:internal/detectors/lidar_detector.py
-                self._build_object("LIDAR_OBJECT_MOVING", score, volume, point_count, velocity)
-========
                 self._build_object(
                     "LIDAR_OBJECT_MOVING",
                     score,
@@ -138,7 +127,6 @@ class LidarDetector(BaseDetector):
                         "density": density,
                     },
                 )
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/lidar_detector.py
             )
 
         #  TALL OBJECT
@@ -152,9 +140,6 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-<<<<<<<< HEAD:internal/detectors/lidar_detector.py
-                self._build_object("LIDAR_OBJECT_TALL", score, volume, point_count, velocity)
-========
                 self._build_object(
                     "LIDAR_OBJECT_TALL",
                     score,
@@ -163,7 +148,6 @@ class LidarDetector(BaseDetector):
                         "volume": volume,
                     },
                 )
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/lidar_detector.py
             )
 
         #  WIDE OBJECT
@@ -177,9 +161,6 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-<<<<<<<< HEAD:internal/detectors/lidar_detector.py
-                self._build_object("LIDAR_OBJECT_WIDE", score, volume, point_count, velocity)
-========
                 self._build_object(
                     "LIDAR_OBJECT_WIDE",
                     score,
@@ -188,7 +169,6 @@ class LidarDetector(BaseDetector):
                         "volume": volume,
                     },
                 )
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/lidar_detector.py
             )
 
         #  HIGH POINT DENSITY
@@ -202,9 +182,6 @@ class LidarDetector(BaseDetector):
         score = self._normalize_score(score)
         if self._should_detect(score):
             detections.append(
-<<<<<<<< HEAD:internal/detectors/lidar_detector.py
-                self._build_object("LIDAR_OBJECT_HIGH_POINT_DENSITY", score, volume, point_count, velocity)
-========
                 self._build_object(
                     "LIDAR_OBJECT_HIGH_POINT_DENSITY",
                     score,
@@ -213,32 +190,17 @@ class LidarDetector(BaseDetector):
                         "point_count": point_count,
                     },
                 )
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/lidar_detector.py
             )
 
         return detections
 
     # Helper Methods
 
-<<<<<<<< HEAD:internal/detectors/lidar_detector.py
-    def _build_object(self, object_type: str, score: float, volume: float, point_count: int, velocity: float):
-        severity = self.severity_engine.classify(confidence=score, velocity=velocity)
-        return {
-            "type": object_type,
-            "confidence": score,
-            "severity": severity,
-            "metadata": {
-                "volume": volume,
-                "point_count": point_count,
-                "velocity_mps": velocity,
-            },
-========
     def _build_object(self, object_type: str, score: float, metadata: Dict[str, Any]):
         return {
             "type": object_type,
             "confidence": score,
             "metadata": metadata,
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/lidar_detector.py
         }
 
     def _validate_lidar_physics(self, raw: Dict[str, Any]):

@@ -1,19 +1,29 @@
 # threat_detection/services/threat_detection_service.py
 
 from typing import Dict, Any
-from detectors.radar_detector import RadarDetector
-from detectors.lidar_detector import LidarDetector
+from database import Database
+from internal.detectors.radar_detector import RadarDetector
+from internal.detectors.lidar_detector import LidarDetector
+from internal.detectors.temporal_tracker import TemporalTracker
 
 
 class ThreatDetectionService:
     """
     Main orchestration service for routing sensor data
-    to appropriate detector.
+    to appropriate detector and applying temporal filtering.
     """
 
     def __init__(self):
 
-        # Initialize detectors with configurable thresholds
+        self.db = Database()
+
+        # Temporal confirmation layer
+        self.temporal_tracker = TemporalTracker(
+            history_size=1,
+            confirmation_threshold=1,
+        )
+
+        # Initialize detectors
         self.detectors = {
             "radar": RadarDetector(
                 velocity_threshold=0.5,
@@ -49,8 +59,36 @@ class ThreatDetectionService:
             )
 
         try:
+
             detector = self.detectors[sensor_type]
+
+            # Step 1: Run detector
             result = detector.process(payload)
+
+            detections = result["detected_objects"]
+
+            # Step 2: Apply temporal confirmation
+            confirmed_detections = self.temporal_tracker.update(
+                payload["sensor_id"],
+                detections,
+            )
+
+            # Store confirmed threats in database
+            for obj in confirmed_detections:
+
+                threat_event = {
+                    "sensor_id": payload["sensor_id"],
+                    "sensor_type": payload["type"],
+                    "type": obj["type"],
+                    "confidence": obj["confidence"],
+                    "severity": obj.get("severity"),
+                    "timestamp": payload["timestamp"]
+                }
+
+                self.db.insert_threat_event(threat_event)
+
+            # Step 3: Replace detections with confirmed threats
+            result["detected_objects"] = confirmed_detections
 
             self._log_detection(result)
 
@@ -59,17 +97,16 @@ class ThreatDetectionService:
         except Exception as e:
             return self._error_response(payload, str(e))
 
-    
+    # ------------------------------------
+    # Logging & Error Handling
+    # ------------------------------------
 
     def _log_detection(self, result: Dict[str, Any]) -> None:
-        """
-        Simple console logging for now.
-        Can later be replaced with structured logging / Kafka publisher.
-        """
+
         if result["detected_objects"]:
-            print("DETECTION:", result)
+            print("CONFIRMED THREAT:", result)
         else:
-            print("NO THREAT:", result["sensor_id"])
+            print("NO CONFIRMED THREAT:", result["sensor_id"])
 
     def _error_response(self, payload: Dict[str, Any], message: str) -> Dict[str, Any]:
 

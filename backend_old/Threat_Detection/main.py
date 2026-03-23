@@ -8,9 +8,14 @@ from collections import deque
 
 from flask import Flask, jsonify, render_template_string
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+BACKEND_OLD_DIR = os.path.dirname(CURRENT_DIR)
+PROJECT_ROOT_DIR = os.path.dirname(BACKEND_OLD_DIR)
 
-from services.threat_detection_service import ThreatDetectionService
+sys.path.insert(0, BACKEND_OLD_DIR)
+sys.path.insert(0, PROJECT_ROOT_DIR)
+
+from internal.services.threat_detection_service import ThreatDetectionService
 
 
 HTML_TEMPLATE = """

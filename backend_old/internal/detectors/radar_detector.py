@@ -32,23 +32,14 @@ class RadarDetector(BaseDetector):
 
         self._validate_radar_physics(raw)
 
-<<<<<<<< HEAD:internal/detectors/radar_detector.py
-        velocity = raw_detection["radial_velocity_mps"]
-        rcs = raw_detection["rcs_dbsm"]
-        snr = raw_detection["snr_db"]
-        range_m = raw_detection["range_m"]
-========
         velocity = raw["radial_velocity_mps"]
         rcs = raw["rcs_dbsm"]
         snr = raw["snr_db"]
         range_m = raw["range_m"]
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/radar_detector.py
 
         detections: List[Dict[str, Any]] = []
 
-        
         # MOVING OBJECT
-        
         score = 0.0
 
         if abs(velocity) > self.velocity_threshold:
@@ -68,30 +59,11 @@ class RadarDetector(BaseDetector):
         if self._should_detect(score):
             detections.append(
                 self._build_object(
-<<<<<<<< HEAD:internal/detectors/radar_detector.py
                     "RADAR_OBJECT_MOVING", score, velocity, rcs, range_m
                 )
             )
 
-        # ------------------------
-        # 2️⃣ FAST APPROACHING OBJECT
-        # ------------------------
-========
-                    "RADAR_OBJECT_MOVING",
-                    score,
-                    {
-                        "velocity": velocity,
-                        "rcs": rcs,
-                        "snr": snr,
-                        "range": range_m,
-                    },
-                )
-            )
-
-        
-        #  FAST APPROACHING OBJECT
-        
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/radar_detector.py
+        # FAST APPROACHING OBJECT
         score = 0.0
 
         if velocity < -self.fast_approach_threshold:
@@ -113,29 +85,13 @@ class RadarDetector(BaseDetector):
                 self._build_object(
                     "RADAR_OBJECT_FAST_APPROACHING",
                     score,
-<<<<<<<< HEAD:internal/detectors/radar_detector.py
                     velocity,
                     rcs,
                     range_m,
                 )
             )
 
-        # ------------------------
-        # 3️⃣ HIGH RCS OBJECT
-        # ------------------------
-========
-                    {
-                        "velocity": velocity,
-                        "snr": snr,
-                        "rcs": rcs,
-                        "range": range_m,
-                    },
-                )
-            )
-
-       
-        #  HIGH RCS OBJECT
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/radar_detector.py
+        # HIGH RCS OBJECT
         score = 0.0
 
         if rcs > self.rcs_threshold:
@@ -154,27 +110,13 @@ class RadarDetector(BaseDetector):
                 self._build_object(
                     "RADAR_OBJECT_HIGH_RCS",
                     score,
-<<<<<<<< HEAD:internal/detectors/radar_detector.py
                     velocity,
                     rcs,
                     range_m,
                 )
             )
 
-        # ------------------------
-        # 4️⃣ STATIONARY LARGE OBJECT
-        # ------------------------
-========
-                    {
-                        "rcs": rcs,
-                        "snr": snr,
-                        "range": range_m,
-                    },
-                )
-            )
-
         # STATIONARY LARGE OBJECT
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/radar_detector.py
         score = 0.0
 
         if abs(velocity) < self.stationary_velocity_epsilon:
@@ -196,24 +138,14 @@ class RadarDetector(BaseDetector):
                 self._build_object(
                     "RADAR_OBJECT_STATIONARY_LARGE",
                     score,
-<<<<<<<< HEAD:internal/detectors/radar_detector.py
                     velocity,
                     rcs,
                     range_m,
-========
-                    {
-                        "velocity": velocity,
-                        "rcs": rcs,
-                        "snr": snr,
-                        "range": range_m,
-                    },
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/radar_detector.py
                 )
             )
 
         return detections
 
-<<<<<<<< HEAD:internal/detectors/radar_detector.py
     # ------------------------------------
     # Distance Risk Model (NEW)
     # ------------------------------------
@@ -235,8 +167,6 @@ class RadarDetector(BaseDetector):
         return 0.0
 
     # ------------------------------------
-========
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/radar_detector.py
     # Helper Methods
 
     def _apply_noise_penalty(self, score: float, snr: float) -> float:
@@ -251,15 +181,14 @@ class RadarDetector(BaseDetector):
         self,
         object_type: str,
         score: float,
-<<<<<<<< HEAD:internal/detectors/radar_detector.py
         velocity: float,
         rcs: float,
         range_m: float,
     ):
         severity = self.severity_engine.classify(
-        confidence=score,
-        distance=range_m,
-        velocity=velocity,
+            confidence=score,
+            distance=range_m,
+            velocity=velocity,
         )
         return {
             "type": object_type,
@@ -270,14 +199,6 @@ class RadarDetector(BaseDetector):
                 "rcs": rcs,
                 "range_m": range_m,
             },
-========
-        metadata: Dict[str, Any],
-    ):
-        return {
-            "type": object_type,
-            "confidence": score,
-            "metadata": metadata,
->>>>>>>> 7e2f86475db0d4805a98e48cb5bfbfe1b35bc129:backend_old/Threat_Detection/detectors/radar_detector.py
         }
 
     def _validate_radar_physics(self, raw: Dict[str, Any]):
