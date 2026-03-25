@@ -46,12 +46,16 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database import init_db, register_sensor, insert_radar_reading, insert_lidar_reading
+from internal.services.threat_detection_service import ThreatDetectionService
 
 HOST = "127.0.0.1"
 PORT = 9000
 
 # Initialize database
 init_db()
+
+# Initialize threat detection (process messages as they arrive)
+threat_service = ThreatDetectionService()
 
 def handle_client(conn, addr):
     print("Connected by", addr)
@@ -66,6 +70,14 @@ def handle_client(conn, addr):
             message = json.loads(data.decode())
 
             print("Received:", message)
+
+            # Real-time threat detection on the incoming message
+            try:
+                detection = threat_service.process(message)
+                if detection.get("detected_objects"):
+                    print("THREAT:", detection)
+            except Exception as detect_error:
+                print("Threat detection error:", detect_error)
 
             try:
                 # Register sensor metadata

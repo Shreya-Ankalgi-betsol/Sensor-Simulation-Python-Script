@@ -15,14 +15,29 @@
     #map { height: calc(100vh - 110px); width: 100%; }
     .toolbar { padding: 10px 14px; background: white; border-bottom: 1px solid #e5e7eb; display: flex; gap: 16px; align-items: center; }
     .pill { padding: 6px 10px; border-radius: 18px; background: #eef2ff; color: #1f3b8f; font-size: 13px; }
+    .layout { display: grid; grid-template-columns: 1fr 360px; height: calc(100vh - 50px); }
+    #map { height: 100%; }
+    .side { background: white; border-left: 1px solid #e5e7eb; overflow: auto; }
+    .side h3 { margin: 12px 12px 8px; font-size: 14px; color: #111827; }
+    .threats { list-style: none; padding: 0; margin: 0 12px 12px; }
+    .threats li { padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 10px; margin-bottom: 8px; font-size: 12px; background: #f9fafb; }
+    .muted { color: #6b7280; }
   </style>
 </head>
 <body>
   <div class="toolbar">
     <div class="pill">UI: Sensor locations + coverage + trajectories</div>
     <div class="pill" id="status">Loading...</div>
+    <div class="pill" id="threatStatus">Threats: ...</div>
   </div>
-  <div id="map"></div>
+  <div class="layout">
+    <div id="map"></div>
+    <div class="side">
+      <h3>Live threats</h3>
+      <ul class="threats" id="threatList"></ul>
+      <div class="muted" style="padding: 0 12px 12px;">Updates every 2 seconds</div>
+    </div>
+  </div>
 
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
@@ -94,6 +109,7 @@
 
     async function refresh() {
       const status = document.getElementById('status');
+      const threatStatus = document.getElementById('threatStatus');
       try {
         const response = await fetch('/api/map-data');
         const data = await response.json();
@@ -110,6 +126,28 @@
         });
 
         status.textContent = `Sensors: ${data.sensors.length} | DB: ${data.db_path}`;
+
+        // Threats
+        try {
+          const tRes = await fetch('/api/threats');
+          const tData = await tRes.json();
+          const list = document.getElementById('threatList');
+          list.innerHTML = '';
+
+          const threats = tData.threats || [];
+          threatStatus.textContent = `Threats: ${threats.length}`;
+
+          threats.slice().reverse().forEach(t => {
+            const li = document.createElement('li');
+            li.innerHTML =
+              `<div><b>${t.threat_type}</b> <span class="muted">(${t.severity ?? 'n/a'})</span></div>` +
+              `<div class="muted">${t.sensor_id} • ${t.sensor_type} • conf ${Number(t.confidence).toFixed(2)}</div>` +
+              `<div class="muted">${t.timestamp}</div>`;
+            list.appendChild(li);
+          });
+        } catch (e) {
+          threatStatus.textContent = 'Threats: unavailable';
+        }
       } catch (error) {
         status.textContent = 'Failed to load map data';
       }
