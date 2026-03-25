@@ -1,218 +1,158 @@
-import argparse
-import json
-import os
-import socket
+# threat_detection/main.py
+
 import sys
-import threading
-from collections import deque
+import os
+import sqlite3
+import json
+import time
 
-from flask import Flask, jsonify, render_template_string
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-BACKEND_OLD_DIR = os.path.dirname(CURRENT_DIR)
-PROJECT_ROOT_DIR = os.path.dirname(BACKEND_OLD_DIR)
+from services.threat_detection_service import ThreatDetectionService
+from database import init_db
 
-sys.path.insert(0, BACKEND_OLD_DIR)
-sys.path.insert(0, PROJECT_ROOT_DIR)
-
-from internal.services.threat_detection_service import ThreatDetectionService
-
-
-HTML_TEMPLATE = """
-<!doctype html>
-<html>
-<head>
-  <meta charset=\"utf-8\" />
-  <title>Threat Monitor</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 24px; background: #f7f7f9; }
-    h1 { margin: 0 0 10px 0; }
-    .stats { display: flex; gap: 10px; margin: 14px 0 20px; }
-    .card { background: white; border-radius: 8px; padding: 10px 14px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-    .list { display: grid; gap: 10px; }
-    .item { background: white; border-left: 4px solid #d32f2f; border-radius: 8px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-    .meta { color: #444; font-size: 13px; margin-bottom: 4px; }
-    .empty { color: #666; }
-    code { background: #f0f1f3; padding: 1px 5px; border-radius: 4px; }
-  </style>
-</head>
-<body>
-  <h1>Live Threat Detection</h1>
-  <div>Listening for stream on <code id=\"stream\"></code></div>
-
-  <div class=\"stats\">
-    <div class=\"card\">Processed: <strong id=\"processed\">0</strong></div>
-    <div class=\"card\">Threats: <strong id=\"threats\">0</strong></div>
-    <div class=\"card\">Errors: <strong id=\"errors\">0</strong></div>
-  </div>
-
-  <h3>Recent Threats</h3>
-  <div id=\"threatList\" class=\"list\"></div>
-
-  <script>
-    const streamInfo = document.getElementById("stream");
-    const processed = document.getElementById("processed");
-    const threats = document.getElementById("threats");
-    const errors = document.getElementById("errors");
-    const list = document.getElementById("threatList");
-
-    function renderThreats(items) {
-      if (!items.length) {
-        list.innerHTML = '<div class="empty">No threats detected yet.</div>';
-        return;
-      }
-
-      list.innerHTML = items.map(item => {
-        const detected = (item.detected_objects || []).map(obj => JSON.stringify(obj)).join("<br>");
-        const errorText = item.error ? `<div><strong>Error:</strong> ${item.error}</div>` : "";
-        return `
-          <div class="item">
-            <div class="meta">Sensor: <strong>${item.sensor_id}</strong> | Type: <strong>${item.sensor_type}</strong> | Time: ${item.timestamp}</div>
-            ${errorText}
-            <div>${detected || "No object details"}</div>
-          </div>
-        `;
-      }).join("");
-    }
-
-    async function refresh() {
-      try {
-        const res = await fetch('/api/threats');
-        const data = await res.json();
-        streamInfo.textContent = `${data.stream.host}:${data.stream.port}`;
-        processed.textContent = data.stats.processed;
-        threats.textContent = data.stats.threats;
-        errors.textContent = data.stats.errors;
-        renderThreats(data.threats);
-      } catch (e) {
-        list.innerHTML = '<div class="empty">Unable to fetch threat data.</div>';
-      }
-    }
-
-    refresh();
-    setInterval(refresh, 1000);
-  </script>
-</body>
-</html>
-"""
+# Database is in project root
+DB_NAME = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sensor_data.db")
 
 
-app = Flask(__name__)
-service = ThreatDetectionService()
-state_lock = threading.Lock()
-recent_threats = deque(maxlen=50)
-stats = {
-    "processed": 0,
-    "threats": 0,
-    "errors": 0,
-}
-stream_config = {
-    "host": "127.0.0.1",
-    "port": 9100,
-}
+def fetch_sensor_data_from_db(limit=None):
+    """
+    Fetch all sensor readings from the database and yield them
+    """
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        
+        # Fetch radar readings
+        query = "SELECT sensor_id, raw_detection, timestamp FROM radar_readings"
+        if limit:
+            query += f" LIMIT {limit}"
+        
+        cursor.execute(query)
+        radar_readings = cursor.fetchall()
+        
+        for sensor_id, raw_detection_json, timestamp in radar_readings:
+            yield {
+                "sensor_id": sensor_id,
+                "type": "radar",
+                "timestamp": timestamp,
+                "raw_detection": json.loads(raw_detection_json)
+            }
+        
+        # Fetch lidar readings
+        query = "SELECT sensor_id, raw_detection, timestamp FROM lidar_readings"
+        if limit:
+            query += f" LIMIT {limit}"
+        
+        cursor.execute(query)
+        lidar_readings = cursor.fetchall()
+        
+        for sensor_id, raw_detection_json, timestamp in lidar_readings:
+            yield {
+                "sensor_id": sensor_id,
+                "type": "lidar",
+                "timestamp": timestamp,
+                "raw_detection": json.loads(raw_detection_json)
+            }
+        
+        conn.close()
+        
+    except sqlite3.OperationalError as e:
+        print(f"Database error: {e}")
 
 
-def record_result(result):
-    with state_lock:
-        stats["processed"] += 1
-
-        if result.get("error"):
-            stats["errors"] += 1
-            recent_threats.appendleft(result)
-            return
-
-        if result.get("detected_objects"):
-            stats["threats"] += 1
-            recent_threats.appendleft(result)
-
-
-def process_message(message):
-    result = service.process(message)
-    record_result(result)
+def process_all_stored_data(limit=None):
+    """
+    Process all existing sensor data from the database
+    """
+    # Ensure database is initialized
+    init_db()
+    
+    service = ThreatDetectionService()
+    
+    data_count = 0
+    for payload in fetch_sensor_data_from_db(limit):
+        result = service.process(payload)
+        data_count += 1
+    
+    print(f"\nProcessed {data_count} sensor readings from database")
 
 
-def handle_stream_connection(conn, addr):
-    print(f"Threat stream connected: {addr}")
-    buffer = ""
-
+def monitor_real_time(poll_interval=2, batch_size=10):
+    """
+    Monitor database for new sensor readings in real-time
+    Polls the database periodically for new data
+    """
+    # Ensure database is initialized
+    init_db()
+    
+    service = ThreatDetectionService()
+    last_processed_id = {"radar": 0, "lidar": 0}
+    
+    print("Starting real-time threat detection from database...\n")
+    
     try:
         while True:
-            data = conn.recv(4096)
-            if not data:
-                break
-
-            buffer += data.decode()
-
-            while "\n" in buffer:
-                raw_message, buffer = buffer.split("\n", 1)
-                raw_message = raw_message.strip()
-
-                if not raw_message:
-                    continue
-
-                try:
-                    message = json.loads(raw_message)
-                except json.JSONDecodeError as json_error:
-                    print(f"Threat stream JSON error: {json_error}")
-                    continue
-
-                process_message(message)
-    except Exception as stream_error:
-        print(f"Threat stream error from {addr}: {stream_error}")
-    finally:
-        try:
+            conn = sqlite3.connect(DB_NAME)
+            cursor = conn.cursor()
+            
+            # Fetch new radar readings
+            cursor.execute(
+                "SELECT id, sensor_id, raw_detection, timestamp FROM radar_readings WHERE id > ? LIMIT ?",
+                (last_processed_id["radar"], batch_size)
+            )
+            radar_readings = cursor.fetchall()
+            
+            for reading_id, sensor_id, raw_detection_json, timestamp in radar_readings:
+                payload = {
+                    "sensor_id": sensor_id,
+                    "type": "radar",
+                    "timestamp": timestamp,
+                    "raw_detection": json.loads(raw_detection_json)
+                }
+                service.process(payload)
+                last_processed_id["radar"] = reading_id
+            
+            # Fetch new lidar readings
+            cursor.execute(
+                "SELECT id, sensor_id, raw_detection, timestamp FROM lidar_readings WHERE id > ? LIMIT ?",
+                (last_processed_id["lidar"], batch_size)
+            )
+            lidar_readings = cursor.fetchall()
+            
+            for reading_id, sensor_id, raw_detection_json, timestamp in lidar_readings:
+                payload = {
+                    "sensor_id": sensor_id,
+                    "type": "lidar",
+                    "timestamp": timestamp,
+                    "raw_detection": json.loads(raw_detection_json)
+                }
+                service.process(payload)
+                last_processed_id["lidar"] = reading_id
+            
             conn.close()
-        except Exception:
-            pass
-        print(f"Threat stream disconnected: {addr}")
-
-
-def run_stream_listener(host, port):
-    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    listener.bind((host, port))
-    listener.listen()
-
-    print(f"Threat detection stream listener running on {host}:{port}")
-
-    while True:
-        conn, addr = listener.accept()
-        threading.Thread(target=handle_stream_connection, args=(conn, addr), daemon=True).start()
-
-
-@app.get("/")
-def index():
-    return render_template_string(HTML_TEMPLATE)
-
-
-@app.get("/api/threats")
-def api_threats():
-    with state_lock:
-        return jsonify(
-            {
-                "stream": stream_config,
-                "stats": dict(stats),
-                "threats": list(recent_threats),
-            }
-        )
+            
+            # Poll interval
+            time.sleep(poll_interval)
+            
+    except KeyboardInterrupt:
+        print("\n\nThreat detection monitoring stopped")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Real-time threat detection + UI")
-    parser.add_argument("--stream-host", default="127.0.0.1", help="Host for incoming sensor stream")
-    parser.add_argument("--stream-port", type=int, default=9100, help="Port for incoming sensor stream")
-    parser.add_argument("--ui-host", default="127.0.0.1", help="Host for web UI")
-    parser.add_argument("--ui-port", type=int, default=5050, help="Port for web UI")
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Threat Detection using real sensor data")
+    parser.add_argument("--mode", choices=["batch", "realtime"], default="batch",
+                        help="Mode: 'batch' to process all existing data, 'realtime' to monitor new data")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Limit number of records to process (batch mode only)")
+    parser.add_argument("--poll-interval", type=int, default=2,
+                        help="Poll interval in seconds (realtime mode only)")
+    
     args = parser.parse_args()
-
-    stream_config["host"] = args.stream_host
-    stream_config["port"] = args.stream_port
-
-    threading.Thread(
-        target=run_stream_listener,
-        args=(args.stream_host, args.stream_port),
-        daemon=True,
-    ).start()
-
-    print(f"Threat UI running at http://{args.ui_host}:{args.ui_port}")
-    app.run(host=args.ui_host, port=args.ui_port, debug=False)
+    
+    if args.mode == "batch":
+        process_all_stored_data(args.limit)
+    else:
+        monitor_real_time(args.poll_interval)

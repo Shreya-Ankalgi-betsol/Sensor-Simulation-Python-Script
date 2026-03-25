@@ -24,3 +24,10 @@ sensor_log.json
 # OS
 .DS_Store
 Thumbs.db
+# Local tooling / backups
+.pull_backup/
+.push_backup/
+Frontend/node_modules/
+Frontend/dist/
+Frontend/.pull_backup/
+Frontend/.push_backup/

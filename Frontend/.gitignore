@@ -22,3 +22,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local backups
+.pull_backup
+
+# Build output (project-specific)
+build
+

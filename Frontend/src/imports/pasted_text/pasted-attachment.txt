@@ -1,0 +1,220 @@
+🧩 GLOBAL DESIGN SYSTEM
+Theme: Dark mode. Deep space / military-grade aesthetic.
+Color Palette:
+
+Background: #0A0D14 (near-black navy)
+Sidebar: #0F1320
+Cards/Panels: #141926
+Primary Accent: #00E5FF (electric cyan)
+Danger/Threat: #FF3B3B (alert red)
+Warning: #FF9F0A (amber)
+Safe/OK: #30D158 (green)
+Offline: #636366 (gray)
+Text Primary: #E8EAF0
+Text Secondary: #6B7280
+Borders: #1E2535
+
+Typography:
+
+Headings: Rajdhani or Bebas Neue — bold, geometric, military feel
+Body/Labels: JetBrains Mono or IBM Plex Mono — monospace for tech data
+UI Elements: Syne — clean and modern
+
+Border Radius: 8px for cards, 4px for table rows, 12px for modals
+Spacing unit: 8px grid
+
+📐 PAGE 1 — DASHBOARD
+Layout: Full-width desktop (1440px × 900px). Left sidebar (collapsed by default, 60px wide). Main content area fills the rest.
+Top Header Bar:
+
+Left: Hamburger icon (3 horizontal lines, cyan color #00E5FF). On click → sidebar expands to 220px with slide animation
+Center-left: Shield/radar logo icon in cyan, followed by app title "REAL TIME THREAT DETECTION SYSTEM" in Rajdhani Bold, 22px, white
+A thin horizontal separator line below the header in #1E2535
+
+Sidebar (expanded state):
+
+Background: #0F1320
+Width: 220px, slides in from left
+Items (top to bottom): Dashboard, Threats, Sensors, Visualization, Profile
+Active state: left border bar in cyan #00E5FF, background highlight #1A2235, text in white
+Inactive state: text in #6B7280, hover → text turns cyan with subtle background shift
+Each nav item has a matching icon (grid icon, alert triangle, wifi/sensor icon, bar chart, user)
+Bottom of sidebar: user avatar circle + name + role in small text
+
+Alert Panel (just below header, full width):
+
+Thin horizontal ticker/marquee strip, background #141926, border-bottom #1E2535
+Real-time alert messages scrolling left: ⚠ HUMAN DETECTED — Sector 4 | Sensor L-002 | 14:32:10 then 🔴 DRONE DETECTED — North Perimeter | Sensor R-001 | 14:31:55 etc.
+Text in amber #FF9F0A for warnings, red for critical, green for all-clear
+Small blinking dot before each message
+
+Main Map Area (center, takes ~65% of content width):
+
+Dark map background styled like a satellite/tactical map: very dark gray-green #0D1117 with faint grid lines in #1A2535
+Show a bird's-eye view of a facility with boundary walls drawn as white lines with low opacity
+6 sensor markers placed across the map:
+
+3 Radar sensors: icon = concentric arc (radar symbol), label R-001, R-002, R-003
+3 Lidar sensors: icon = laser dot circle, label L-001, L-002, L-003
+Marker colors: Green #30D158 = OK, Red #FF3B3B = Threat, Gray #636366 = Offline
+Each sensor has a circular coverage area in semi-transparent blue rgba(0, 144, 255, 0.08) with a dashed cyan border rgba(0, 229, 255, 0.25)
+
+
+Moving object path: A red dashed line showing a drone flight path across the map, with a small red triangle icon as the drone. Animate as a moving dot along the path.
+Map controls (bottom-right of map): + and − zoom buttons, and a compass/pan control — all styled in dark card #141926 with cyan icons
+
+Sensor Popup (on marker click):
+
+Small floating card 240px wide, dark #1A2535, border #00E5FF 1px, border-radius 10px, subtle drop shadow
+Content:
+
+  [Radar Icon]  R-001
+  Type: Radar
+  Latest Reading: Motion Detected — High Confidence
+  Timestamp: 2025-03-18 14:32:08
+  Status: 🔴 THREAT
+
+Close button top-right ×
+
+Right Side Panel (35% width):
+
+Header: LIVE ALERTS in caps, cyan, small monospace
+Each alert card: dark background #141926, left border color based on severity (red/amber/green), shows:
+
+Icon (drone / person / temperature)
+DRONE DETECTED in bold red/amber
+Sensor R-001 · North Gate · 14:32
+Small ACK button in ghost style
+
+
+Cards stack vertically, newest on top, subtle fade-in animation on new entries
+Scrollable list
+
+
+📐 PAGE 2 — THREATS PAGE
+Page Header:
+
+Page title: THREATS in Rajdhani Bold 32px, white. Small breadcrumb above: Dashboard / Threats in secondary gray
+
+Filter Bar (horizontal row below title):
+
+Label: FILTERS in small caps cyan
+5 dropdowns side by side, each styled as dark pill/button with a chevron ▾:
+
+Time: Options: Last 30 min / Last 1 Hour / Last 2 Hours / Custom (custom shows two datetime pickers inline)
+Sensor Type: Lidar / Radar
+Type of Threat: Drone / Trespassing / Temperature / Weapon
+Severity: Low / Medium / High
+Acknowledgment: Yes / No
+
+
+Dropdown menus: dark #141926, border cyan, options with hover state in #1E2A3A
+
+Summary Stat Cards (4 boxes in a row):
+
+Each card: 160px × 90px, background #141926, border #1E2535, rounded 8px
+Subtle top border line in accent color:
+
+TOTAL THREATS — value 47 — cyan top border
+HIGH SEVERITY — value 12 — red top border
+ACTIVE SENSORS — value 6 — green top border
+ACKNOWLEDGED — value 31 — amber top border
+
+
+Value in large Rajdhani 36px, label in small JetBrains Mono 10px secondary
+
+Threat Log Table (below stats):
+
+Title: THREAT LOG in small caps, cyan
+Styled as a glassy data grid — not a plain HTML table:
+
+Alternating row backgrounds: #141926 and #0F1320
+Column headers in small caps, #6B7280, with sort arrows
+Row hover: left glow line in cyan, row background shifts to #1A2535
+Severity badge: pill-shaped — Red for High, Amber for Medium, Green for Low
+Acknowledge column: toggle switch (green = yes, gray = no)
+
+
+Columns: Threat | Sensor ID | Sensor Type | Location | Severity | Acknowledgment
+
+Dummy data (6 visible rows):
+ThreatSensor IDTypeLocationSeverityAckDrone DetectedR-001RadarNorth Gate🔴 HighNoTrespassingL-002LidarEast Fence🟠 MediumYesWeapon DetectedR-003RadarMain Entry🔴 HighNoTemperature SpikeL-001LidarServer Room🟡 LowYesDrone DetectedR-002RadarSouth Perimeter🔴 HighNoTrespassingL-003LidarWest Wall🟠 MediumYes
+
+Scroll bar on right: thin, styled cyan on dark track
+Latest reading on top, older entries below
+
+
+📐 PAGE 3 — SENSORS PAGE
+Page Header: SENSORS in Rajdhani Bold 32px
+Stat Strip (4 cards):
+
+Total Sensors: 6 | Active: 4 | Offline: 1 | Error: 1
+
+Sensor Table (same glassy style as Threats):
+Columns: Sensor ID | Type | Status | Location | Last Updated | (row actions)
+Dummy Data (8 rows):
+Sensor IDTypeStatusLocationLast UpdatedR-001Radar🟢 ActiveNorth Gate18 Mar 2025, 14:32R-002Radar🟢 ActiveSouth Perimeter18 Mar 2025, 14:30R-003Radar🔴 ErrorMain Entry18 Mar 2025, 13:55L-001Lidar🟢 ActiveServer Room18 Mar 2025, 14:31L-002Lidar🟢 ActiveEast Fence18 Mar 2025, 14:28L-003Lidar⚫ OfflineWest Wall18 Mar 2025, 11:10
+
+Status badge: colored dot + text
+Each row: subtle hover state
+
+Bottom of table — two buttons (right-aligned):
+
+EDIT SENSOR — ghost button, cyan border + text
+ADD SENSOR — filled cyan button, dark text
+
+Add/Edit Sensor Modal (popup on button click):
+
+Centered modal, 400px × 340px, background #141926, border 1px solid #00E5FF, rounded 12px
+Title: ADD SENSOR or EDIT SENSOR in Rajdhani Bold
+Fields: Sensor ID (text input) | Type (dropdown: Radar/Lidar) | Location (text input) | Status (dropdown)
+Inputs: dark background #0A0D14, border #1E2535, focus border cyan
+Buttons: SAVE (filled cyan) + CANCEL (ghost)
+Backdrop: dark overlay rgba(0,0,0,0.7)
+
+
+📐 PAGE 4 — VISUALIZATION PAGE
+Page Header: VISUALIZATION in Rajdhani Bold 32px
+Layout: 2×2 grid of chart cards (each ~480px × 280px), with 16px gap
+Chart 1 (top-left): Threats Over Time
+
+Line chart, X-axis: time (hours), Y-axis: threat count
+Line color: cyan #00E5FF, area fill below: gradient from cyan to transparent
+Grid lines: very subtle #1E2535
+
+Chart 2 (top-right): Threats by Location
+
+Horizontal bar chart
+Bars in gradient from amber to red based on severity count
+Locations: North Gate, East Fence, Main Entry, Server Room, South Perimeter, West Wall
+
+Chart 3 (bottom-left): Threat Type Distribution
+
+Donut/pie chart
+Segments: Drone (red), Trespassing (amber), Temperature (yellow), Weapon (deep red)
+Center label: TOTAL 47
+
+Chart 4 (bottom-right): Sensor Activity Heatmap
+
+Grid heatmap — rows = sensors (R-001 to L-003), columns = hours of day (0–23)
+Color intensity from dark #0A0D14 → bright cyan for high activity
+Labels in small monospace
+
+Each chart card:
+
+Background: #141926
+Border: #1E2535
+Card header: chart title in small caps cyan + small filter/export icon top-right
+Hover: card gets a very subtle cyan outer glow
+
+
+✨ INTERACTION & HOVER NOTES (for all pages)
+
+All buttons: hover state = brightness increase + subtle scale 1.02
+Table rows: hover = left cyan glow bar + row highlight
+Sidebar nav items: hover = cyan text + → arrow appears
+Alert cards: fade + slide in from right
+Map markers: hover = pulse animation ring
+Dropdowns: smooth expand animation, backdrop blur on overlay
+Modal: fade in + scale up from 95% to 100%
+Stat cards: hover = lift shadow effect
