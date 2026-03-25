@@ -1,0 +1,40 @@
+import enum
+import uuid
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, String, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from Backend.app.models.sensor import Sensor
+from app.db.session import Base
+
+
+class ThreatSeverity(str, enum.Enum):
+    low = "low"
+    med = "med"
+    high = "high"
+    critical = "critical"
+
+
+class ThreatLog(Base):
+    __tablename__ = "threat_logs"
+
+    alert_id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    sensor_id: Mapped[str] = mapped_column(
+        String, ForeignKey("sensors.sensor_id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    sensor_type: Mapped[str] = mapped_column(String, nullable=False)
+    threat_type: Mapped[str] = mapped_column(String, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    severity: Mapped[ThreatSeverity] = mapped_column(Enum(ThreatSeverity), nullable=False)
+    acknowledged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    sensor: Mapped["Sensor"] = relationship("Sensor", back_populates="threat_logs")
+
+    def __repr__(self) -> str:
+        return f"<ThreatLog {self.alert_id} type={self.threat_type} severity={self.severity}>"
