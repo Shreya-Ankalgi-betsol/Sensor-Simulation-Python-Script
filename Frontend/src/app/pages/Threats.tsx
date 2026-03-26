@@ -1,7 +1,22 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { threats } from "../data/mockData";
+import { sensors, type Threat } from "../data/mockData";
 import { NotificationBell } from "../components/NotificationBell";
+
+interface BackendThreatEvent {
+  id: number;
+  sensor_id: string;
+  sensor_type: string;
+  threat_type: string;
+  confidence: number;
+  severity?: string | null;
+  timestamp: string;
+}
+
+interface BackendThreatsResponse {
+  db_path: string;
+  threats: BackendThreatEvent[];
+}
 
 export function Threats() {
   const [filterTime, setFilterTime] = useState("Last 1 Hour");
@@ -9,6 +24,9 @@ export function Threats() {
   const [filterThreatType, setFilterThreatType] = useState("All");
   const [filterSeverity, setFilterSeverity] = useState("All");
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
+
+  const [threatLog, setThreatLog] = useState<Threat[]>([]);
+  const [backendError, setBackendError] = useState<string | null>(null);
   
   // Custom date range state
   const [fromDate, setFromDate] = useState("");
@@ -20,11 +38,96 @@ export function Threats() {
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
-  const stats = {
-    total: threats.length,
-    high: threats.filter((t) => t.severity === "High").length,
-    active: 6,
-  };
+  const stats = useMemo(
+    () => ({
+      total: threatLog.length,
+      high: threatLog.filter((t) => t.severity === "High").length,
+      active: 6,
+    }),
+    [threatLog]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const toUiSensorType = (raw: string): Threat["sensorType"] => {
+      const value = String(raw ?? "").toLowerCase();
+      if (value.includes("lidar")) return "Lidar";
+      return "Radar";
+    };
+
+    const toUiSeverity = (raw: string | null | undefined): Threat["severity"] => {
+      const value = String(raw ?? "").toUpperCase();
+      if (value === "CRITICAL" || value === "HIGH") return "High";
+      if (value === "MEDIUM") return "Medium";
+      return "Low";
+    };
+
+    const toUiThreatType = (raw: string): Threat["type"] => {
+      const value = String(raw ?? "").toLowerCase();
+      if (value.includes("drone") || value.includes("uav")) return "Drone";
+      if (value.includes("weapon")) return "Weapon";
+      if (value.includes("temp") || value.includes("heat") || value.includes("fire")) return "Temperature";
+      if (value.includes("trespass") || value.includes("intrusion") || value.includes("human")) return "Trespassing";
+      return "Trespassing";
+    };
+
+    const findLocation = (sensorId: string): string => {
+      const found = sensors.find((s) => s.id === sensorId);
+      return found?.location ?? "Unknown";
+    };
+
+    const fetchThreats = async () => {
+      try {
+        const response = await fetch("/api/threats", {
+          headers: { Accept: "application/json" },
+        });
+
+        const contentType = response.headers.get("content-type") ?? "";
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        if (!contentType.includes("application/json")) {
+          const text = await response.text();
+          throw new Error(`Expected JSON but got ${contentType || "unknown"}: ${text.slice(0, 80)}`);
+        }
+
+        const json = (await response.json()) as BackendThreatsResponse;
+
+        const mapped: Threat[] = (json.threats ?? []).map((t) => {
+          const sensorId = String(t.sensor_id);
+          const threatType = String(t.threat_type);
+          const severity = toUiSeverity(t.severity);
+          return {
+            id: `TH-${t.id}`,
+            type: toUiThreatType(threatType),
+            sensorId,
+            sensorType: toUiSensorType(t.sensor_type),
+            location: findLocation(sensorId),
+            severity,
+            timestamp: String(t.timestamp),
+            description: `${threatType} (${severity})`,
+          };
+        });
+
+        if (!cancelled) {
+          setThreatLog(mapped);
+          setBackendError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setBackendError(e instanceof Error ? e.message : "Failed to load threats");
+        }
+      }
+    };
+
+    fetchThreats();
+    const interval = window.setInterval(fetchThreats, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -193,6 +296,21 @@ export function Threats() {
         >
           THREATS
         </h1>
+
+        {backendError ? (
+          <div
+            className="mt-3 rounded-lg px-4 py-3"
+            style={{
+              background: "#FEE2E2",
+              border: "1px solid var(--border-color)",
+              color: "#991B1B",
+              fontFamily: "var(--font-mono)",
+              fontSize: "0.865rem",
+            }}
+          >
+            Backend error: {backendError}
+          </div>
+        ) : null}
       </div>
 
       {/* Filter Bar */}
@@ -543,7 +661,7 @@ export function Threats() {
                 </tr>
               </thead>
               <tbody>
-                {threats.map((threat, index) => (
+                {threatLog.map((threat, index) => (
                   <tr
                     key={threat.id}
                     className="border-b transition-all duration-200 group relative"

@@ -70,27 +70,48 @@ import socket
 import json
 import threading
 import time
-from Model.sensors import RadarSensor, LidarSensor
+from model.sensors import RadarSensor, LidarSensor
 
 HOST = "127.0.0.1"
 PORT = 9000
 
-# Ask user how many sensors
-num = int(input("How many sensors? "))
+def _read_non_negative_int(prompt: str) -> int:
+    while True:
+        raw = input(prompt).strip()
+        try:
+            value = int(raw)
+        except ValueError:
+            print("Please enter a valid integer.")
+            continue
+
+        if value < 0:
+            print("Please enter 0 or a positive number.")
+            continue
+
+        return value
+
+
+radar_count = _read_non_negative_int("How many RADAR sensors? ")
+lidar_count = _read_non_negative_int("How many LIDAR sensors? ")
 
 sensors = []
 
-for i in range(num):
-    sensor_type = input(f"Enter type for sensor {i+1} (RADAR/LIDAR): ").upper()
-    latitude = 23.02 + i * 0.001
-    longitude = 72.57 + i * 0.001
+base_lat = 23.02
+base_lon = 72.57
+coord_step = 0.001
+coord_index = 0
 
-    if sensor_type == "RADAR":
-        sensor = RadarSensor(f"RADAR_{i+1}", latitude, longitude)
-    else:
-        sensor = LidarSensor(f"LIDAR_{i+1}", latitude, longitude)
+for i in range(radar_count):
+    latitude = base_lat + coord_index * coord_step
+    longitude = base_lon + coord_index * coord_step
+    coord_index += 1
+    sensors.append(RadarSensor(f"RADAR_{i+1}", latitude, longitude))
 
-    sensors.append(sensor)
+for i in range(lidar_count):
+    latitude = base_lat + coord_index * coord_step
+    longitude = base_lon + coord_index * coord_step
+    coord_index += 1
+    sensors.append(LidarSensor(f"LIDAR_{i+1}", latitude, longitude))
 
 
 def sensor_thread(sensor):

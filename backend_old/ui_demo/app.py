@@ -21,6 +21,7 @@ class SensorMapRepository:
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         candidates = [
             os.path.join(project_root, "sensor_data.db"),
+            os.path.join(project_root, "backend_old", "sensor_data.db"),
             os.path.join(project_root, "backend_old", "SERVER", "sensor_data.db"),
         ]
         for candidate in candidates:
@@ -136,6 +137,42 @@ class SensorMapRepository:
             )
         return records
 
+    def get_recent_threats(self, limit: int = 50) -> list[dict[str, Any]]:
+        conn = self._connect()
+        cursor = conn.cursor()
+
+        try:
+            rows = cursor.execute(
+                """
+                SELECT id, sensor_id, sensor_type, threat_type, confidence, severity, timestamp
+                FROM threat_events
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            # threat_events table not present yet
+            rows = []
+        finally:
+            conn.close()
+
+        threats: list[dict[str, Any]] = []
+        for row in reversed(rows):
+            threats.append(
+                {
+                    "id": int(row[0]),
+                    "sensor_id": str(row[1]),
+                    "sensor_type": str(row[2]),
+                    "threat_type": str(row[3]),
+                    "confidence": float(row[4]) if row[4] is not None else 0.0,
+                    "severity": row[5],
+                    "timestamp": str(row[6]),
+                }
+            )
+
+        return threats
+
 
 def meters_to_latlon(base_lat: float, base_lon: float, dx_m: float, dy_m: float) -> tuple[float, float]:
     lat = base_lat + (dy_m / 111_111.0)
@@ -235,5 +272,16 @@ def map_data():
     )
 
 
+@app.route("/api/threats")
+def threats():
+    repo = SensorMapRepository()
+    return jsonify(
+        {
+            "db_path": repo.db_path,
+            "threats": repo.get_recent_threats(limit=50),
+        }
+    )
+
+
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=8080, debug=True)
+    app.run(host="127.0.0.1", port=5050, debug=True)

@@ -1,26 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-interface DetectedObject {
-  type: string;
-  confidence: number;
-  severity?: string;
-}
-
-interface ThreatData {
+interface ThreatEvent {
+  id: number;
   sensor_id: string;
   sensor_type: string;
+  threat_type: string;
+  confidence: number;
+  severity?: string | null;
   timestamp: string;
-  detected_objects?: DetectedObject[];
-  error?: string;
 }
 
 interface ApiResponse {
-  stats: {
-    processed: number;
-    threats: number;
-    errors: number;
-  };
-  threats: ThreatData[];
+  db_path: string;
+  threats: ThreatEvent[];
 }
 
 export function ThreatsBackend() {
@@ -28,11 +20,20 @@ export function ThreatsBackend() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const stats = useMemo(() => {
+    const threats = data?.threats ?? [];
+    const critical = threats.filter((t) => String(t.severity).toUpperCase() === "CRITICAL").length;
+    return {
+      total: threats.length,
+      critical,
+    };
+  }, [data]);
+
   useEffect(() => {
     const fetchThreats = async () => {
       try {
         setLoading(true);
-        const response = await fetch("http://127.0.0.1:5050/api/threats");
+        const response = await fetch("/api/threats");
         if (!response.ok) {
           throw new Error(`Failed to fetch: ${response.status}`);
         }
@@ -52,231 +53,93 @@ export function ThreatsBackend() {
   }, []);
 
   return (
-    <div style={{ padding: "20px", fontFamily: "Arial, sans-serif" }}>
-      <h1>Live Threats from Backend</h1>
+    <div className="p-6">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold">Live Threats from Backend</h1>
+        <p className="text-sm text-muted-foreground">
+          Source: <span className="font-mono">/api/threats</span>
+          {data?.db_path ? (
+            <>
+              {" "}• DB: <span className="font-mono">{data.db_path}</span>
+            </>
+          ) : null}
+        </p>
+      </div>
 
-      {error && (
-        <div
-          style={{
-            color: "red",
-            backgroundColor: "#ffe0e0",
-            padding: "10px",
-            marginBottom: "20px",
-            borderRadius: "4px",
-          }}
-        >
-          ⚠️ {error}
+      {error ? (
+        <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Failed to fetch: {error}
         </div>
-      )}
+      ) : null}
 
-      {loading && !data && (
-        <div style={{ fontSize: "16px", color: "#999" }}>Loading...</div>
-      )}
+      {!data && loading ? (
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      ) : null}
 
-      {data && (
+      {data ? (
         <>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3, 1fr)",
-              gap: "20px",
-              marginBottom: "30px",
-            }}
-          >
-            <div
-              style={{
-                padding: "15px",
-                backgroundColor: "#f0f0f0",
-                borderRadius: "8px",
-              }}
-            >
-              <div style={{ fontSize: "12px", color: "#666" }}>Processed</div>
-              <div style={{ fontSize: "28px", fontWeight: "bold" }}>
-                {data.stats.processed}
-              </div>
+          <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-3">
+            <div className="rounded-lg border bg-card p-4">
+              <div className="text-xs text-muted-foreground">Total threats (latest 50)</div>
+              <div className="mt-1 text-2xl font-semibold">{stats.total}</div>
             </div>
-
-            <div
-              style={{
-                padding: "15px",
-                backgroundColor: "#ffe0e0",
-                borderRadius: "8px",
-              }}
-            >
-              <div style={{ fontSize: "12px", color: "#666" }}>
-                Threats Detected
-              </div>
-              <div style={{ fontSize: "28px", fontWeight: "bold", color: "red" }}>
-                {data.stats.threats}
-              </div>
+            <div className="rounded-lg border bg-card p-4">
+              <div className="text-xs text-muted-foreground">Critical</div>
+              <div className="mt-1 text-2xl font-semibold">{stats.critical}</div>
             </div>
-
-            <div
-              style={{
-                padding: "15px",
-                backgroundColor: "#fff0e0",
-                borderRadius: "8px",
-              }}
-            >
-              <div style={{ fontSize: "12px", color: "#666" }}>Errors</div>
-              <div style={{ fontSize: "28px", fontWeight: "bold" }}>
-                {data.stats.errors}
-              </div>
+            <div className="hidden rounded-lg border bg-card p-4 md:block">
+              <div className="text-xs text-muted-foreground">Refresh</div>
+              <div className="mt-1 text-2xl font-semibold">2s</div>
             </div>
           </div>
 
-          <h2>Recent Detections</h2>
-
           {data.threats.length === 0 ? (
-            <p style={{ color: "#999" }}>No threats detected yet.</p>
+            <div className="rounded-lg border bg-card p-4 text-sm text-muted-foreground">
+              No threats yet. Start the TCP server + simulator.
+            </div>
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table
-                style={{
-                  width: "100%",
-                  borderCollapse: "collapse",
-                  border: "1px solid #ddd",
-                  marginTop: "10px",
-                }}
-              >
-                <thead>
-                  <tr style={{ backgroundColor: "#f5f5f5" }}>
-                    <th
-                      style={{
-                        border: "1px solid #ddd",
-                        padding: "12px",
-                        textAlign: "left",
-                      }}
-                    >
-                      Sensor
-                    </th>
-                    <th
-                      style={{
-                        border: "1px solid #ddd",
-                        padding: "12px",
-                        textAlign: "left",
-                      }}
-                    >
-                      Type
-                    </th>
-                    <th
-                      style={{
-                        border: "1px solid #ddd",
-                        padding: "12px",
-                        textAlign: "left",
-                      }}
-                    >
-                      Time
-                    </th>
-                    <th
-                      style={{
-                        border: "1px solid #ddd",
-                        padding: "12px",
-                        textAlign: "left",
-                      }}
-                    >
-                      Detection
-                    </th>
-                    <th
-                      style={{
-                        border: "1px solid #ddd",
-                        padding: "12px",
-                        textAlign: "left",
-                      }}
-                    >
-                      Confidence
-                    </th>
-                    <th
-                      style={{
-                        border: "1px solid #ddd",
-                        padding: "12px",
-                        textAlign: "left",
-                      }}
-                    >
-                      Severity
-                    </th>
+            <div className="overflow-x-auto rounded-lg border bg-card">
+              <table className="w-full border-collapse text-sm">
+                <thead className="bg-muted/50 text-left">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Time</th>
+                    <th className="px-4 py-3 font-medium">Sensor</th>
+                    <th className="px-4 py-3 font-medium">Type</th>
+                    <th className="px-4 py-3 font-medium">Threat</th>
+                    <th className="px-4 py-3 font-medium">Confidence</th>
+                    <th className="px-4 py-3 font-medium">Severity</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.threats.map((threat, idx) => (
-                    <tr key={idx}>
-                      <td
-                        style={{
-                          border: "1px solid #ddd",
-                          padding: "10px",
-                          fontWeight: "bold",
-                        }}
-                      >
-                        {threat.sensor_id}
-                      </td>
-                      <td style={{ border: "1px solid #ddd", padding: "10px" }}>
-                        {threat.sensor_type?.toUpperCase() || "—"}
-                      </td>
-                      <td style={{ border: "1px solid #ddd", padding: "10px" }}>
-                        {new Date(threat.timestamp).toLocaleTimeString()}
-                      </td>
-                      <td style={{ border: "1px solid #ddd", padding: "10px" }}>
-                        {threat.error ? (
-                          <span style={{ color: "red" }}>Error: {threat.error}</span>
-                        ) : threat.detected_objects &&
-                          threat.detected_objects.length > 0 ? (
-                          <span>
-                            {threat.detected_objects
-                              .map((obj) => obj.type)
-                              .join(", ")}
-                          </span>
-                        ) : (
-                          <span style={{ color: "#999" }}>No detection</span>
-                        )}
-                      </td>
-                      <td style={{ border: "1px solid #ddd", padding: "10px" }}>
-                        {threat.detected_objects &&
-                        threat.detected_objects.length > 0 ? (
-                          <span style={{ fontWeight: "bold" }}>
-                            {(threat.detected_objects[0].confidence * 100).toFixed(
-                              0
-                            )}
-                            %
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td style={{ border: "1px solid #ddd", padding: "10px" }}>
-                        {threat.detected_objects &&
-                        threat.detected_objects.length > 0 &&
-                        threat.detected_objects[0].severity ? (
-                          <span
-                            style={{
-                              padding: "4px 8px",
-                              borderRadius: "4px",
-                              backgroundColor:
-                                threat.detected_objects[0].severity === "CRITICAL"
-                                  ? "#dc2626"
-                                  : threat.detected_objects[0].severity === "HIGH"
-                                    ? "#f59e0b"
-                                    : threat.detected_objects[0].severity === "MEDIUM"
-                                      ? "#3b82f6"
-                                      : "#10b981",
-                              color: "white",
-                              fontSize: "12px",
-                              fontWeight: "bold",
-                            }}
-                          >
-                            {threat.detected_objects[0].severity}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {data.threats
+                    .slice()
+                    .reverse()
+                    .map((t) => (
+                      <tr key={t.id} className="border-t">
+                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                          {new Date(t.timestamp).toLocaleTimeString()}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 font-medium">{t.sensor_id}</td>
+                        <td className="whitespace-nowrap px-4 py-3">{String(t.sensor_type).toUpperCase()}</td>
+                        <td className="px-4 py-3">{t.threat_type}</td>
+                        <td className="whitespace-nowrap px-4 py-3">{t.confidence.toFixed(2)}</td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {t.severity ? (
+                            <span className="rounded-md border px-2 py-1 text-xs font-medium">
+                              {String(t.severity).toUpperCase()}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
           )}
         </>
-      )}
+      ) : null}
     </div>
   );
 }
