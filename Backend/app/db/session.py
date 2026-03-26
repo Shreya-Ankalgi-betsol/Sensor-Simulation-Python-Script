@@ -1,3 +1,4 @@
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -7,6 +8,9 @@ from app.config import settings
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
+    pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=20,
 )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -36,4 +40,20 @@ async def get_db():
 
 async def create_tables():
     async with engine.begin() as conn:
+        # Step 1 — Create all tables from models
         await conn.run_sync(Base.metadata.create_all)
+
+        # Step 2 — Convert time-series tables to TimescaleDB hypertables
+        # if_not_exists => TRUE means safe to run on every startup
+        await conn.execute(
+            text(
+                "SELECT create_hypertable('radar_readings', 'timestamp', "
+                "if_not_exists => TRUE);"
+            )
+        )
+        await conn.execute(
+            text(
+                "SELECT create_hypertable('lidar_readings', 'timestamp', "
+                "if_not_exists => TRUE);"
+            )
+        )

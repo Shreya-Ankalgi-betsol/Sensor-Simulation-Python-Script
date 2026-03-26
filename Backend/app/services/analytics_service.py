@@ -63,8 +63,7 @@ class AnalyticsService:
             ],
         )
 
-    # ── B: Threats per sensor ─────────────────────────────────────────────────
-
+    #  B: Threats per sensor 
     async def get_threats_per_sensor(
         self,
         filters: AnalyticsFilter,
@@ -108,7 +107,7 @@ class AnalyticsService:
             ]
         )
 
-    # ── C: Severity breakdown ─────────────────────────────────────────────────
+    #  C: Severity breakdown 
 
     async def get_severity_breakdown(
         self,
