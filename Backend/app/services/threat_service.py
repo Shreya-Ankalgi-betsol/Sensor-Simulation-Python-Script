@@ -6,9 +6,11 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.sensor import Sensor, SensorStatus
 from app.models.threat_log import ThreatLog
-from app.schemas.threat import AcknowledgeOut, PagedThreats, ThreatFilter, ThreatOut
 from app.services.ws_session_manager import session_manager
+
+from app.schemas.threat import  PagedThreats, ThreatFilter, ThreatOut, ThreatSummaryOut
 
 
 class ThreatService:
@@ -38,8 +40,6 @@ class ThreatService:
             query = query.where(ThreatLog.sensor_id == filters.sensor_id)
         if filters.severity is not None:
             query = query.where(ThreatLog.severity == filters.severity)
-        if filters.acknowledged is not None:
-            query = query.where(ThreatLog.acknowledged == filters.acknowledged)
         if filters.from_dt is not None:
             query = query.where(ThreatLog.timestamp >= filters.from_dt)
         if filters.to_dt is not None:
@@ -91,38 +91,67 @@ class ThreatService:
 
     #  Acknowledge threat 
 
-    async def acknowledge_threat(
-        self, threat_id: str, db: AsyncSession
-    ) -> AcknowledgeOut:
-        threat = await db.get(ThreatLog, threat_id)
-        if not threat:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Threat '{threat_id}' not found.",
-            )
-        if threat.acknowledged:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Threat is already acknowledged.",
-            )
+    # async def acknowledge_threat(
+    #     self, threat_id: str, db: AsyncSession
+    # ) -> AcknowledgeOut:
+    #     threat = await db.get(ThreatLog, threat_id)
+    #     if not threat:
+    #         raise HTTPException(
+    #             status_code=status.HTTP_404_NOT_FOUND,
+    #             detail=f"Threat '{threat_id}' not found.",
+    #         )
+    #     if threat.acknowledged:
+    #         raise HTTPException(
+    #             status_code=status.HTTP_409_CONFLICT,
+    #             detail="Threat is already acknowledged.",
+    #         )
 
-        threat.acknowledged = True
-        await db.flush()
+    #     threat.acknowledged = True
+    #     await db.flush()
 
-        await session_manager.broadcast(
-            "alert_acknowledged",
-            {
-                "alert_id": threat.alert_id,
-                "sensor_id": threat.sensor_id,
-            },
-        )
+    #     await session_manager.broadcast(
+    #         "alert_acknowledged",
+    #         {
+    #             "alert_id": threat.alert_id,
+    #             "sensor_id": threat.sensor_id,
+    #         },
+    #     )
 
-        return AcknowledgeOut(message="Threat acknowledged successfully.")
+    #     return AcknowledgeOut(message="Threat acknowledged successfully.")
 
     #  Push alert (called by detection engine) 
 
     async def push_alert(self, alert_data: dict) -> None:
         await session_manager.broadcast("alert_new", alert_data)
+    
+    async def get_threat_summary(self, db: AsyncSession) -> ThreatSummaryOut:
+        # Total threats
+        total_result = await db.execute(
+            select(func.count(ThreatLog.alert_id))
+        )
+        total_threats = total_result.scalar_one()
+
+        # High severity count
+        high_result = await db.execute(
+            select(func.count(ThreatLog.alert_id)).where(
+                ThreatLog.severity == "high"
+            )
+        )
+        high_severity_count = high_result.scalar_one()
+
+        # Active sensor count
+        active_result = await db.execute(
+            select(func.count(Sensor.sensor_id)).where(
+                Sensor.status == SensorStatus.active
+            )
+        )
+        active_sensor_count = active_result.scalar_one()
+
+        return ThreatSummaryOut(
+            total_threats=total_threats,
+            high_severity_count=high_severity_count,
+            active_sensor_count=active_sensor_count,
+        )
 
 
 threat_service = ThreatService()

@@ -2,14 +2,26 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.schemas.threat import AcknowledgeOut, PagedThreats, ThreatFilter
+from app.schemas.threat import  PagedThreats, ThreatFilter
 from app.services.threat_service import threat_service
+from app.schemas.threat import PagedThreats, ThreatFilter, ThreatSummaryOut
 
 router = APIRouter(
     prefix="/api/v1/threats",
     tags=["Threats"],
 )
 
+
+@router.get(
+    "/summary",
+    response_model=ThreatSummaryOut,
+    summary="Threat summary",
+    description="Returns total threats, high severity count and active sensor count.",
+)
+async def get_threat_summary(
+    db: AsyncSession = Depends(get_db),
+) -> ThreatSummaryOut:
+    return await threat_service.get_threat_summary(db)
 
 @router.get(
     "",
@@ -24,7 +36,6 @@ router = APIRouter(
 async def get_threats(
     sensor_id: str | None = None,
     severity: str | None = None,
-    acknowledged: bool | None = None,
     from_dt: str | None = None,
     to_dt: str | None = None,
     cursor: str | None = None,
@@ -34,7 +45,6 @@ async def get_threats(
     filters = ThreatFilter(
         sensor_id=sensor_id,
         severity=severity,
-        acknowledged=acknowledged,
         from_dt=from_dt,
         to_dt=to_dt,
         cursor=cursor,
@@ -43,18 +53,18 @@ async def get_threats(
     return await threat_service.get_threats(filters, db)
 
 
-@router.put(
-    "/{threat_id}/acknowledge",
-    response_model=AcknowledgeOut,
-    summary="Acknowledge a threat",
-    description=(
-        "Marks a threat as acknowledged. "
-        "Broadcasts alert_acknowledged event to all connected WebSocket clients. "
-        "Returns 409 if threat is already acknowledged."
-    ),
-)
-async def acknowledge_threat(
-    threat_id: str,
-    db: AsyncSession = Depends(get_db),
-) -> AcknowledgeOut:
-    return await threat_service.acknowledge_threat(threat_id, db)
+# @router.put(
+#     "/{threat_id}/acknowledge",
+#     response_model=AcknowledgeOut,
+#     summary="Acknowledge a threat",
+#     description=(
+#         "Marks a threat as acknowledged. "
+#         "Broadcasts alert_acknowledged event to all connected WebSocket clients. "
+#         "Returns 409 if threat is already acknowledged."
+#     ),
+# )
+# async def acknowledge_threat(
+#     threat_id: str,
+#     db: AsyncSession = Depends(get_db),
+# ) -> AcknowledgeOut:
+#     return await threat_service.acknowledge_threat(threat_id, db)

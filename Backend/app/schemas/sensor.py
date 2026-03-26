@@ -13,6 +13,7 @@ class SensorCreate(BaseModel):
     sensor_type: SensorType
     lat: float = Field(..., ge=-90, le=90)
     lng: float = Field(..., ge=-180, le=180)
+    location: str
     coverage_radius_m: float = Field(default=50.0, gt=0)
 
 
@@ -20,6 +21,7 @@ class SensorCreate(BaseModel):
 class SensorUpdate(BaseModel):
     lat: Optional[float] = Field(default=None, ge=-90, le=90)
     lng: Optional[float] = Field(default=None, ge=-180, le=180)
+    location: str
     coverage_radius_m: Optional[float] = Field(default=None, gt=0)
 
 
@@ -30,8 +32,16 @@ class SensorOut(BaseModel):
     status: SensorStatus
     lat: float
     lng: float
+    location: str
     coverage_radius_m: float
     last_ping: Optional[datetime]
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+#summary
+class SensorSummaryOut(BaseModel):
+    total_count: int
+    active_count: int
+    inactive_count: int
+    error_count: int

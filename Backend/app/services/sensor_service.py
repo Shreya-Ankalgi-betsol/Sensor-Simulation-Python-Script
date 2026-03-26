@@ -1,12 +1,11 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select
 
 from app.models.sensor import Sensor, SensorStatus
-from app.schemas.sensor import SensorCreate, SensorOut, SensorUpdate
-
+from app.schemas.sensor import SensorCreate, SensorOut, SensorSummaryOut, SensorUpdate
 
 class SensorService:
 
@@ -44,6 +43,7 @@ class SensorService:
             sensor_type=data.sensor_type,
             lat=data.lat,
             lng=data.lng,
+            location=data.location,
             coverage_radius_m=data.coverage_radius_m,
             status=SensorStatus.offline,
         )
@@ -66,6 +66,8 @@ class SensorService:
             sensor.lat = data.lat
         if data.lng is not None:
             sensor.lng = data.lng
+        if data.location is not None:
+            sensor.location = data.location
         if data.coverage_radius_m is not None:
             sensor.coverage_radius_m = data.coverage_radius_m
 
@@ -73,5 +75,42 @@ class SensorService:
         await db.refresh(sensor)
         return SensorOut.model_validate(sensor)
 
+    #  Sensor summary
+    async def get_sensor_summary(self, db: AsyncSession) -> SensorSummaryOut:
+    # Total count
+        total_result = await db.execute(
+            select(func.count(Sensor.sensor_id))
+        )
+        total_count = total_result.scalar_one()
 
+        # Active count
+        active_result = await db.execute(
+            select(func.count(Sensor.sensor_id)).where(
+                Sensor.status == SensorStatus.active
+            )
+        )
+        active_count = active_result.scalar_one()
+
+        # Inactive count
+        inactive_result = await db.execute(
+            select(func.count(Sensor.sensor_id)).where(
+                Sensor.status == SensorStatus.inactive
+            )
+        )
+        inactive_count = inactive_result.scalar_one()
+
+        # Error count
+        error_result = await db.execute(
+            select(func.count(Sensor.sensor_id)).where(
+                Sensor.status == SensorStatus.error
+            )
+        )
+        error_count = error_result.scalar_one()
+
+        return SensorSummaryOut(
+            total_count=total_count,
+            active_count=active_count,
+            inactive_count=inactive_count,
+            error_count=error_count,
+        )
 sensor_service = SensorService()

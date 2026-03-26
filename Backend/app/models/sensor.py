@@ -14,11 +14,11 @@ class SensorType(str, enum.Enum):
     lidar = "lidar"
 
 
-class SensorStatus(str, enum.Enum):
-    online = "online"
-    offline = "offline"
-    error = "error"
 
+class SensorStatus(str, enum.Enum):
+    active = "active"
+    inactive = "inactive"
+    error = "error"
 
 class Sensor(Base):
     __tablename__ = "sensors"
@@ -30,6 +30,7 @@ class Sensor(Base):
     )
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lng: Mapped[float] = mapped_column(Float, nullable=False)
+    location: Mapped[str] = mapped_column(String, nullable=False)
     coverage_radius_m: Mapped[float] = mapped_column(Float, nullable=False, default=50.0)
     last_ping: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

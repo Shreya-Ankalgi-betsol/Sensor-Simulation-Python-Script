@@ -101,6 +101,7 @@ class AnalyticsService:
                 ThreatPerSensorPoint(
                     sensor_id=s.sensor_id,
                     sensor_type=s.sensor_type,
+                    location=s.location, 
                     count=threat_counts.get(s.sensor_id, 0),
                 )
                 for s in all_sensors

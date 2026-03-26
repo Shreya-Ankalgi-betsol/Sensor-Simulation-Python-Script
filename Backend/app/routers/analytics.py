@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.schemas.analytics import (
     AnalyticsFilter,
+    BucketBy,
     SeverityBreakdownOut,
     ThreatTimelineOut,
     ThreatsPerSensorOut,
@@ -19,40 +20,37 @@ router = APIRouter(
 )
 
 
-def now_utc() -> datetime:
-    return datetime.now(tz=timezone.utc)
-
-
 @router.get(
     "/threat-timeline",
     response_model=ThreatTimelineOut,
     summary="Threat activity over time",
     description=(
         "Returns threat counts grouped into time buckets. "
-        "Defaults to last 24 hours bucketed by hour on page load. "
-        "Use bucket_by='hour' for last 24h views, 'day' for weekly/monthly views."
+        "Frontend is responsible for sending from_dt, to_dt and bucket_by. "
+        "bucket_by options: minute, hour, day."
     ),
 )
 async def threat_timeline(
-    bucket_by: str = Query(
-        default="hour",
-        description="Time bucket size — 'hour' or 'day'",
+    bucket_by: BucketBy = Query(
+        default=BucketBy.hour,
+        description="Time bucket size — minute, hour or day",
     ),
     from_dt: Optional[datetime] = Query(
         default=None,
-        description="Start of date range (ISO 8601 UTC). Defaults to 24 hours ago.",
+        description="Start of date range (ISO 8601 UTC)",
     ),
     to_dt: Optional[datetime] = Query(
         default=None,
-        description="End of date range (ISO 8601 UTC). Defaults to now.",
+        description="End of date range (ISO 8601 UTC)",
     ),
     db: AsyncSession = Depends(get_db),
 ) -> ThreatTimelineOut:
-    resolved_from = from_dt if from_dt is not None else now_utc() - timedelta(hours=24)
-    resolved_to = to_dt if to_dt is not None else now_utc()
-
-    filters = AnalyticsFilter(from_dt=resolved_from, to_dt=resolved_to)
-    return await analytics_service.get_threat_timeline(filters, bucket_by, db)
+    filters = AnalyticsFilter(
+        from_dt=from_dt,
+        to_dt=to_dt,
+        bucket_by=bucket_by,
+    )
+    return await analytics_service.get_threat_timeline(filters, db)
 
 
 @router.get(
@@ -62,24 +60,21 @@ async def threat_timeline(
     description=(
         "Returns total threat count grouped by sensor. "
         "All sensors included even with zero threats. "
-        "Defaults to last 7 days on page load."
+        "Frontend sends from_dt and to_dt."
     ),
 )
 async def threats_per_sensor(
     from_dt: Optional[datetime] = Query(
         default=None,
-        description="Start of date range (ISO 8601 UTC). Defaults to 7 days ago.",
+        description="Start of date range (ISO 8601 UTC)",
     ),
     to_dt: Optional[datetime] = Query(
         default=None,
-        description="End of date range (ISO 8601 UTC). Defaults to now.",
+        description="End of date range (ISO 8601 UTC)",
     ),
     db: AsyncSession = Depends(get_db),
 ) -> ThreatsPerSensorOut:
-    resolved_from = from_dt if from_dt is not None else now_utc() - timedelta(days=7)
-    resolved_to = to_dt if to_dt is not None else now_utc()
-
-    filters = AnalyticsFilter(from_dt=resolved_from, to_dt=resolved_to)
+    filters = AnalyticsFilter(from_dt=from_dt, to_dt=to_dt)
     return await analytics_service.get_threats_per_sensor(filters, db)
 
 
@@ -90,22 +85,20 @@ async def threats_per_sensor(
     description=(
         "Returns threat counts grouped by severity level. "
         "Ordered critical → high → med → low. "
-        "Defaults to last 24 hours on page load."
+        "Frontend sends from_dt and to_dt."
     ),
 )
 async def severity_breakdown(
     from_dt: Optional[datetime] = Query(
         default=None,
-        description="Start of date range (ISO 8601 UTC). Defaults to 24 hours ago.",
+        description="Start of date range (ISO 8601 UTC)",
     ),
     to_dt: Optional[datetime] = Query(
         default=None,
-        description="End of date range (ISO 8601 UTC). Defaults to now.",
+        description="End of date range (ISO 8601 UTC)",
     ),
     db: AsyncSession = Depends(get_db),
 ) -> SeverityBreakdownOut:
-    resolved_from = from_dt if from_dt is not None else now_utc() - timedelta(hours=24)
-    resolved_to = to_dt if to_dt is not None else now_utc()
-
-    filters = AnalyticsFilter(from_dt=resolved_from, to_dt=resolved_to)
+    filters = AnalyticsFilter(from_dt=from_dt, to_dt=to_dt)
     return await analytics_service.get_severity_breakdown(filters, db)
+

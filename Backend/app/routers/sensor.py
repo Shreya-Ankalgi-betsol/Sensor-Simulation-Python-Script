@@ -2,14 +2,26 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.schemas.sensor import SensorCreate, SensorOut, SensorUpdate
 from app.services.sensor_service import sensor_service
+from app.schemas.sensor import SensorCreate, SensorOut, SensorSummaryOut, SensorUpdate
 
 router = APIRouter(
     prefix="/api/v1/sensors",
     tags=["Sensors"],
 )
 
+
+
+@router.get(
+    "/summary",
+    response_model=SensorSummaryOut,
+    summary="Sensor summary",
+    description="Returns total, active, inactive and error sensor counts.",
+)
+async def get_sensor_summary(
+    db: AsyncSession = Depends(get_db),
+) -> SensorSummaryOut:
+    return await sensor_service.get_sensor_summary(db)
 
 @router.get(
     "",

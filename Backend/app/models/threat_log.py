@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, String, func
+from sqlalchemy import  DateTime, Enum, Float, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from Backend.app.models.sensor import Sensor
@@ -13,7 +13,7 @@ class ThreatSeverity(str, enum.Enum):
     low = "low"
     med = "med"
     high = "high"
-    critical = "critical"
+    
 
 
 class ThreatLog(Base):
@@ -29,7 +29,6 @@ class ThreatLog(Base):
     threat_type: Mapped[str] = mapped_column(String, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     severity: Mapped[ThreatSeverity] = mapped_column(Enum(ThreatSeverity), nullable=False)
-    acknowledged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )

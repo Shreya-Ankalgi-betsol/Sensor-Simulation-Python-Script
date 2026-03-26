@@ -14,7 +14,7 @@ class ThreatOut(BaseModel):
     threat_type: str
     confidence: float
     severity: ThreatSeverity
-    acknowledged: bool
+    
     timestamp: datetime
 
     model_config = {"from_attributes": True}
@@ -30,16 +30,22 @@ class PagedThreats(BaseModel):
 
 # Acknowledge response 
 
-class AcknowledgeOut(BaseModel):
-    message: str
+# class AcknowledgeOut(BaseModel):
+#     message: str
 
 
 # Filter params 
 class ThreatFilter(BaseModel):
     sensor_id: Optional[str] = None
     severity: Optional[ThreatSeverity] = None
-    acknowledged: Optional[bool] = None
+    
     from_dt: Optional[datetime] = None
     to_dt: Optional[datetime] = None
     page_size: int = 20
     cursor: Optional[str] = None
+    
+# Summary     
+class ThreatSummaryOut(BaseModel):
+    total_threats: int
+    high_severity_count: int
+    active_sensor_count: int
