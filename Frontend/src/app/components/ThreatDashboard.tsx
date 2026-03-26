@@ -1,27 +1,18 @@
 import { useEffect, useState } from "react";
 
-interface DetectedObject {
-  type: string;
-  confidence: number;
-  severity?: string;
-  metadata?: Record<string, unknown>;
-}
-
-interface ThreatData {
+interface ThreatEvent {
+  id: number;
   sensor_id: string;
   sensor_type: string;
   timestamp: string;
-  detected_objects?: DetectedObject[];
-  error?: string;
+  threat_type: string;
+  confidence: number;
+  severity?: string | null;
 }
 
 interface ApiResponse {
-  stats: {
-    processed: number;
-    threats: number;
-    errors: number;
-  };
-  threats: ThreatData[];
+  db_path: string;
+  threats: ThreatEvent[];
 }
 
 export default function ThreatDashboard() {
@@ -33,7 +24,7 @@ export default function ThreatDashboard() {
     const fetchThreats = async () => {
       try {
         setLoading(true);
-        const response = await fetch("http://127.0.0.1:5050/api/threats");
+        const response = await fetch("/api/threats");
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
@@ -78,13 +69,10 @@ export default function ThreatDashboard() {
             }}
           >
             <div>
-              <strong>Processed:</strong> {data.stats.processed}
+              <strong>Total threats (latest 50):</strong> {data.threats.length}
             </div>
             <div>
-              <strong>Threats Detected:</strong> {data.stats.threats}
-            </div>
-            <div>
-              <strong>Errors:</strong> {data.stats.errors}
+              <strong>DB:</strong> {data.db_path}
             </div>
           </div>
 
@@ -136,31 +124,13 @@ export default function ThreatDashboard() {
                         {new Date(threat.timestamp).toLocaleTimeString()}
                       </td>
                       <td style={{ border: "1px solid #ddd", padding: "10px" }}>
-                        {threat.error ? (
-                          <span style={{ color: "red" }}>Error</span>
-                        ) : threat.detected_objects &&
-                          threat.detected_objects.length > 0 ? (
-                          threat.detected_objects
-                            .map((obj) => obj.type)
-                            .join(", ")
-                        ) : (
-                          <span style={{ color: "#999" }}>—</span>
-                        )}
+                        {threat.threat_type}
                       </td>
                       <td style={{ border: "1px solid #ddd", padding: "10px" }}>
-                        {threat.detected_objects &&
-                        threat.detected_objects.length > 0
-                          ? (threat.detected_objects[0].confidence * 100).toFixed(
-                              0
-                            ) + "%"
-                          : "—"}
+                        {threat.confidence.toFixed(2)}
                       </td>
                       <td style={{ border: "1px solid #ddd", padding: "10px" }}>
-                        {threat.detected_objects &&
-                        threat.detected_objects.length > 0 &&
-                        threat.detected_objects[0].severity
-                          ? threat.detected_objects[0].severity
-                          : "—"}
+                        {threat.severity ?? "—"}
                       </td>
                     </tr>
                   ))}

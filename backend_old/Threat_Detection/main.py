@@ -143,7 +143,7 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Threat Detection using real sensor data")
-    parser.add_argument("--mode", choices=["batch", "realtime"], default="batch",
+    parser.add_argument("--mode", choices=["batch", "realtime"], default="realtime",
                         help="Mode: 'batch' to process all existing data, 'realtime' to monitor new data")
     parser.add_argument("--limit", type=int, default=None,
                         help="Limit number of records to process (batch mode only)")
