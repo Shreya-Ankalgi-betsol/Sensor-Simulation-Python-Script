@@ -45,7 +45,7 @@ class SensorService:
             lng=data.lng,
             location=data.location,
             coverage_radius_m=data.coverage_radius_m,
-            status=SensorStatus.offline,
+            status=SensorStatus.inactive,
         )
         db.add(sensor)
         await db.flush()

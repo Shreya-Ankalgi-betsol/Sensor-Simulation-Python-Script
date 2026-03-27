@@ -4,8 +4,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, Enum, Float, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from Backend.app.models.sensor_reading import LidarReading, RadarReading
-from Backend.app.models.threat_log import ThreatLog
+from app.models.sensor_reading import LidarReading, RadarReading
 from app.db.session import Base
 
 
@@ -26,7 +25,7 @@ class Sensor(Base):
     sensor_id: Mapped[str] = mapped_column(String, primary_key=True)
     sensor_type: Mapped[SensorType] = mapped_column(Enum(SensorType), nullable=False)
     status: Mapped[SensorStatus] = mapped_column(
-        Enum(SensorStatus), nullable=False, default=SensorStatus.offline
+        Enum(SensorStatus), nullable=False, default=SensorStatus.inactive
     )
     lat: Mapped[float] = mapped_column(Float, nullable=False)
     lng: Mapped[float] = mapped_column(Float, nullable=False)

@@ -30,10 +30,10 @@ class AnalyticsService:
 
         # Choose bucket size
         if bucket_by == "day":
-            bucket_expr = func.strftime("%Y-%m-%d", ThreatLog.timestamp)
+            bucket_expr = func.to_char(ThreatLog.timestamp, 'YYYY-MM-DD')
         else:
             bucket_by = "hour"
-            bucket_expr = func.strftime("%Y-%m-%dT%H:00:00", ThreatLog.timestamp)
+            bucket_expr = func.to_char(ThreatLog.timestamp, 'YYYY-MM-DD"T"HH:00:00')
 
         query = (
             select(
@@ -124,10 +124,9 @@ class AnalyticsService:
             .group_by(ThreatLog.severity)
             .order_by(
                 case(
-                    (ThreatLog.severity == ThreatSeverity.critical, 1),
-                    (ThreatLog.severity == ThreatSeverity.high, 2),
-                    (ThreatLog.severity == ThreatSeverity.med, 3),
-                    (ThreatLog.severity == ThreatSeverity.low, 4),
+                    (ThreatLog.severity == ThreatSeverity.high, 1),
+                    (ThreatLog.severity == ThreatSeverity.med, 2),
+                    (ThreatLog.severity == ThreatSeverity.low, 3),
                 )
             )
         )

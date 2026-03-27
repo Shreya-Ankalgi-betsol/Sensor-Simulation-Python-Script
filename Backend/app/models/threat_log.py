@@ -5,7 +5,6 @@ from datetime import datetime
 from sqlalchemy import  DateTime, Enum, Float, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from Backend.app.models.sensor import Sensor
 from app.db.session import Base
 
 

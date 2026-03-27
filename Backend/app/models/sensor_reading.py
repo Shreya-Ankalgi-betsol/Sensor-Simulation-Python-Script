@@ -5,7 +5,6 @@ from datetime import datetime
 from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from Backend.app.models.sensor import Sensor
 from app.db.session import Base
 
 
@@ -24,7 +23,7 @@ class RadarReading(Base):
         String, ForeignKey("sensors.sensor_id", ondelete="CASCADE"), nullable=False, index=True
     )
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, index=True
+        DateTime(timezone=True), primary_key=True, nullable=False
     )
     
     status: Mapped[ReadingStatus] = mapped_column(
@@ -55,7 +54,7 @@ class LidarReading(Base):
         String, ForeignKey("sensors.sensor_id", ondelete="CASCADE"), nullable=False, index=True
     )
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, index=True
+        DateTime(timezone=True), primary_key=True, nullable=False
     )
     
     status: Mapped[ReadingStatus] = mapped_column(

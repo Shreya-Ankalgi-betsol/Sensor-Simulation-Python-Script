@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -45,12 +45,18 @@ async def threat_timeline(
     ),
     db: AsyncSession = Depends(get_db),
 ) -> ThreatTimelineOut:
+    # Default to last 7 days if not specified
+    if from_dt is None:
+        from_dt = datetime.utcnow() - timedelta(days=7)
+    if to_dt is None:
+        to_dt = datetime.utcnow()
+    
     filters = AnalyticsFilter(
         from_dt=from_dt,
         to_dt=to_dt,
         bucket_by=bucket_by,
     )
-    return await analytics_service.get_threat_timeline(filters, db)
+    return await analytics_service.get_threat_timeline(filters, bucket_by, db)
 
 
 @router.get(
@@ -74,6 +80,12 @@ async def threats_per_sensor(
     ),
     db: AsyncSession = Depends(get_db),
 ) -> ThreatsPerSensorOut:
+    # Default to last 7 days if not specified
+    if from_dt is None:
+        from_dt = datetime.utcnow() - timedelta(days=7)
+    if to_dt is None:
+        to_dt = datetime.utcnow()
+    
     filters = AnalyticsFilter(from_dt=from_dt, to_dt=to_dt)
     return await analytics_service.get_threats_per_sensor(filters, db)
 
@@ -99,6 +111,12 @@ async def severity_breakdown(
     ),
     db: AsyncSession = Depends(get_db),
 ) -> SeverityBreakdownOut:
+    # Default to last 7 days if not specified
+    if from_dt is None:
+        from_dt = datetime.utcnow() - timedelta(days=7)
+    if to_dt is None:
+        to_dt = datetime.utcnow()
+    
     filters = AnalyticsFilter(from_dt=from_dt, to_dt=to_dt)
     return await analytics_service.get_severity_breakdown(filters, db)
 
