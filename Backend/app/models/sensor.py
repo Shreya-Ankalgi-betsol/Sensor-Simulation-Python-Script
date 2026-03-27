@@ -4,7 +4,6 @@ from datetime import datetime
 from sqlalchemy import DateTime, Enum, Float, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from Backend.app.models.threat_log import ThreatLog
 from app.models.sensor_reading import LidarReading, RadarReading
 from app.db.session import Base
 
