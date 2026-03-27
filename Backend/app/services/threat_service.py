@@ -7,7 +7,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.sensor import Sensor, SensorStatus
-from app.models.threat_log import ThreatLog
+from app.models.threat_log import ThreatLog, ThreatSeverity
 from app.services.ws_session_manager import session_manager
 
 from app.schemas.threat import  PagedThreats, ThreatFilter, ThreatOut, ThreatSummaryOut
@@ -134,7 +134,7 @@ class ThreatService:
         # High severity count
         high_result = await db.execute(
             select(func.count(ThreatLog.alert_id)).where(
-                ThreatLog.severity == "high"
+                ThreatLog.severity == ThreatSeverity.high
             )
         )
         high_severity_count = high_result.scalar_one()
