@@ -6,8 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db import create_tables
+from app.services.tcp_ingest_server import tcp_ingest_server
 from app.routers import (
     analytics_router,
+    ingest_router,
     sensor_router,
     threat_router,
     user_router,
@@ -31,8 +33,15 @@ async def lifespan(app: FastAPI):
     logger.info("Starting %s ...", settings.app_name)
     await create_tables()
     logger.info("Database tables ready.")
+    if settings.tcp_ingest_enabled:
+        try:
+            await tcp_ingest_server.start()
+        except OSError as exc:
+            logger.warning("TCP ingest server could not start: %s", exc)
     yield
     # Shutdown
+    if settings.tcp_ingest_enabled and tcp_ingest_server.is_running:
+        await tcp_ingest_server.stop()
     logger.info("Shutting down %s.", settings.app_name)
 
 
@@ -67,6 +76,7 @@ app.add_middleware(
 # ── Routers 
 
 app.include_router(sensor_router)
+app.include_router(ingest_router)
 app.include_router(threat_router)
 app.include_router(analytics_router)
 app.include_router(websocket_router)

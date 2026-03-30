@@ -39,9 +39,13 @@ async def get_db():
 
 
 async def create_tables():
+    import app.models  # noqa: F401
+
     async with engine.begin() as conn:
         # Step 1 — Create all tables from models
         await conn.run_sync(Base.metadata.create_all)
+
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb;"))
 
         # Step 2 — Convert time-series tables to TimescaleDB hypertables
         # if_not_exists => TRUE means safe to run on every startup
