@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
 
 from .models import LidarReading, RadarReading, ThreatEvent
@@ -79,6 +80,59 @@ class Database:
                 timestamp TEXT
             )
             """
+        )
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sensor_health (
+                sensor_id TEXT PRIMARY KEY,
+                sensor_type TEXT,
+                last_seen TEXT,
+                last_error_at TEXT,
+                last_error TEXT
+            )
+            """
+        )
+
+        conn.commit()
+        conn.close()
+
+    # -------------------------
+    # Sensor health
+    # -------------------------
+
+    def upsert_sensor_health(
+        self,
+        *,
+        sensor_id: str,
+        sensor_type: str | None,
+        last_seen: str | None,
+        last_error: str | None = None,
+        last_error_at: str | None = None,
+    ) -> None:
+        conn = self._connect()
+        cursor = conn.cursor()
+
+        if last_error is not None and last_error_at is None:
+            last_error_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+        cursor.execute(
+            """
+            INSERT INTO sensor_health (sensor_id, sensor_type, last_seen, last_error_at, last_error)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(sensor_id) DO UPDATE SET
+                sensor_type = COALESCE(excluded.sensor_type, sensor_health.sensor_type),
+                last_seen = COALESCE(excluded.last_seen, sensor_health.last_seen),
+                last_error_at = COALESCE(excluded.last_error_at, sensor_health.last_error_at),
+                last_error = COALESCE(excluded.last_error, sensor_health.last_error)
+            """,
+            (
+                sensor_id,
+                sensor_type,
+                last_seen,
+                last_error_at,
+                last_error,
+            ),
         )
 
         conn.commit()

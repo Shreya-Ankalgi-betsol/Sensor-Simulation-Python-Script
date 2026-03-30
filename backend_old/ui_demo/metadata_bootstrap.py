@@ -7,6 +7,7 @@ import sqlite3
 def resolve_db_path() -> str:
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     candidates = [
+        os.path.join(project_root, "backend_old", "sensor_data.db"),
         os.path.join(project_root, "sensor_data.db"),
         os.path.join(project_root, "backend_old", "SERVER", "sensor_data.db"),
     ]
@@ -18,6 +19,15 @@ def resolve_db_path() -> str:
 
 def ensure_schema(conn: sqlite3.Connection) -> None:
     cursor = conn.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sensors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sensor_id TEXT UNIQUE,
+            sensor_type TEXT
+        )
+        """
+    )
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS sensor_metadata (
@@ -37,13 +47,16 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
 def upsert_defaults(conn: sqlite3.Connection) -> None:
     cursor = conn.cursor()
 
-    rows = cursor.execute(
-        """
-        SELECT sensor_id, sensor_type
-        FROM sensors
-        ORDER BY sensor_id
-        """
-    ).fetchall()
+    try:
+        rows = cursor.execute(
+            """
+            SELECT sensor_id, sensor_type
+            FROM sensors
+            ORDER BY sensor_id
+            """
+        ).fetchall()
+    except sqlite3.OperationalError:
+        rows = []
 
     if not rows:
         rows = [

@@ -1,0 +1,121 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  height: 100vh;
+}
+
+.panel {
+  border-right: 1px solid #1e293b;
+  padding: 16px;
+  overflow-y: auto;
+  background: #111827;
+}
+
+h1 {
+  font-size: 1.1rem;
+  margin: 0 0 6px;
+}
+
+h2 {
+  font-size: 0.95rem;
+  margin: 0 0 8px;
+}
+
+.hint {
+  color: #94a3b8;
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+}
+
+.dot-green {
+  background: #22c55e;
+}
+
+.dot-red {
+  background: #ef4444;
+}
+
+.dot-blue {
+  background: #38bdf8;
+}
+
+.dot-offline {
+  background: #64748b;
+}
+
+.dot-online {
+  background: #22c55e;
+}
+
+.card {
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 10px;
+  background: #0b1220;
+}
+
+.legend,
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.legend li,
+.list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 0.88rem;
+  border-bottom: 1px solid #1e293b;
+}
+
+.legend li:last-child,
+.list li:last-child {
+  border-bottom: none;
+}
+
+.list small {
+  color: #94a3b8;
+  margin-left: auto;
+}
+
+.map-wrap {
+  position: relative;
+}
+
+#map {
+  height: 100%;
+  width: 100%;
+}

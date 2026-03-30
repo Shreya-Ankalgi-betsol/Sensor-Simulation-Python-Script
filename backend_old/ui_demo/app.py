@@ -1,3 +1,5 @@
+# Leaflet (open-source JS map library) and OpenStreetMap tiles 
+
 from __future__ import annotations
 
 import json
@@ -16,12 +18,18 @@ class SensorMapRepository:
     def __init__(self, db_path: str | None = None) -> None:
         self.db_path = db_path or self._resolve_db_path()
         self._ensure_metadata_table()
+        self._ensure_health_table()
+
+        # Heuristic windows (seconds)
+        # Simulator sends every ~2s, so 6s works well.
+        self.active_window_seconds = 6.0
+        self.error_window_seconds = 10.0
 
     def _resolve_db_path(self) -> str:
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         candidates = [
-            os.path.join(project_root, "sensor_data.db"),
             os.path.join(project_root, "backend_old", "sensor_data.db"),
+            os.path.join(project_root, "sensor_data.db"),
             os.path.join(project_root, "backend_old", "SERVER", "sensor_data.db"),
         ]
         for candidate in candidates:
@@ -51,7 +59,63 @@ class SensorMapRepository:
         conn.commit()
         conn.close()
 
+    def _ensure_health_table(self) -> None:
+        conn = self._connect()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sensor_health (
+                sensor_id TEXT PRIMARY KEY,
+                sensor_type TEXT,
+                last_seen TEXT,
+                last_error_at TEXT,
+                last_error TEXT
+            )
+            """
+        )
+        conn.commit()
+        conn.close()
+
+    def _get_sensor_health(self) -> dict[str, dict[str, Any]]:
+        conn = self._connect()
+        cursor = conn.cursor()
+        try:
+            rows = cursor.execute(
+                """
+                SELECT sensor_id, sensor_type, last_seen, last_error_at, last_error
+                FROM sensor_health
+                """
+            ).fetchall()
+        except sqlite3.OperationalError:
+            rows = []
+        finally:
+            conn.close()
+
+        health: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            health[str(row[0])] = {
+                "sensor_id": str(row[0]),
+                "sensor_type": str(row[1]) if row[1] is not None else None,
+                "last_seen": str(row[2]) if row[2] is not None else None,
+                "last_error_at": str(row[3]) if row[3] is not None else None,
+                "last_error": str(row[4]) if row[4] is not None else None,
+            }
+
+        return health
+
+    def _status_for(self, *, last_seen: str | None, last_error_at: str | None) -> str:
+        now = datetime.utcnow().timestamp()
+        if last_error_at and (now - parse_timestamp(last_error_at)) <= self.error_window_seconds:
+            return "Error"
+        if last_seen and (now - parse_timestamp(last_seen)) <= self.active_window_seconds:
+            return "Active"
+        return "Offline"
+
+    def _is_active(self, *, last_seen: str | None, last_error_at: str | None) -> bool:
+        return self._status_for(last_seen=last_seen, last_error_at=last_error_at) == "Active"
+
     def get_sensor_metadata(self) -> dict[str, dict[str, Any]]:
+        health = self._get_sensor_health()
         conn = self._connect()
         cursor = conn.cursor()
 
@@ -73,31 +137,48 @@ class SensorMapRepository:
 
         metadata: dict[str, dict[str, Any]] = {}
         for row in rows:
+            sensor_id = str(row[0])
+            sensor_health = health.get(sensor_id, {})
+            last_seen = sensor_health.get("last_seen")
+            last_error_at = sensor_health.get("last_error_at")
+            status = self._status_for(last_seen=last_seen, last_error_at=last_error_at)
             metadata[str(row[0])] = {
-                "sensor_id": str(row[0]),
+                "sensor_id": sensor_id,
                 "sensor_type": str(row[1]) if row[1] is not None else "unknown",
                 "latitude": float(row[2]),
                 "longitude": float(row[3]),
                 "coverage_angle_deg": float(row[4]),
                 "coverage_range_m": float(row[5]),
                 "mount_yaw_deg": float(row[6] if row[6] is not None else 0.0),
+                "status": status,
+                "is_active": status == "Active",
+                "is_error": status == "Error",
+                "last_seen": last_seen,
+                "last_error": sensor_health.get("last_error"),
             }
 
         return metadata
 
+    def get_sensors(self) -> list[dict[str, Any]]:
+        return list(self.get_sensor_metadata().values())
+
     def get_recent_radar(self, limit: int = 300) -> list[dict[str, Any]]:
         conn = self._connect()
         cursor = conn.cursor()
-        rows = cursor.execute(
-            """
-            SELECT sensor_id, raw_detection, timestamp
-            FROM radar_readings
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
-        conn.close()
+        try:
+            rows = cursor.execute(
+                """
+                SELECT sensor_id, raw_detection, timestamp
+                FROM radar_readings
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            rows = []
+        finally:
+            conn.close()
 
         records: list[dict[str, Any]] = []
         for sensor_id, raw_detection_text, timestamp in reversed(rows):
@@ -114,16 +195,20 @@ class SensorMapRepository:
     def get_recent_lidar(self, limit: int = 300) -> list[dict[str, Any]]:
         conn = self._connect()
         cursor = conn.cursor()
-        rows = cursor.execute(
-            """
-            SELECT sensor_id, raw_detection, timestamp
-            FROM lidar_readings
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
-        conn.close()
+        try:
+            rows = cursor.execute(
+                """
+                SELECT sensor_id, raw_detection, timestamp
+                FROM lidar_readings
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            rows = []
+        finally:
+            conn.close()
 
         records: list[dict[str, Any]] = []
         for sensor_id, raw_detection_text, timestamp in reversed(rows):
@@ -268,6 +353,17 @@ def map_data():
             "db_path": repo.db_path,
             "sensors": sensors,
             "trajectories": trajectories,
+        }
+    )
+
+
+@app.route("/api/sensors")
+def sensors():
+    repo = SensorMapRepository()
+    return jsonify(
+        {
+            "db_path": repo.db_path,
+            "sensors": repo.get_sensors(),
         }
     )
 

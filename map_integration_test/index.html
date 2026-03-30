@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sensor Threat Map Test</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="panel">
+      <h1>Threat Dashboard (Map Test)</h1>
+      <p class="hint">Free integration using OpenStreetMap + Leaflet</p>
+
+      <div class="status-row">
+        <span id="conn-dot" class="dot dot-offline"></span>
+        <span id="conn-text">Disconnected</span>
+      </div>
+
+      <div class="card">
+        <h2>Legend</h2>
+        <ul class="legend">
+          <li><span class="dot dot-green"></span> Sensor Active</li>
+          <li><span class="dot dot-red"></span> Sensor Inactive / Alert</li>
+          <li><span class="dot dot-blue"></span> Object Normal</li>
+          <li><span class="dot dot-red"></span> Object Threat</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>Sensors</h2>
+        <ul id="sensor-list" class="list"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Objects</h2>
+        <ul id="object-list" class="list"></ul>
+      </div>
+    </aside>
+
+    <main class="map-wrap">
+      <div id="map"></div>
+    </main>
+  </div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script src="./app.js"></script>
+</body>
+</html>

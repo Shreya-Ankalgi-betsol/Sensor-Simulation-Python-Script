@@ -27,6 +27,7 @@ export function Threats() {
 
   const [threatLog, setThreatLog] = useState<Threat[]>([]);
   const [backendError, setBackendError] = useState<string | null>(null);
+  const [activeSensors, setActiveSensors] = useState<number>(0);
   
   // Custom date range state
   const [fromDate, setFromDate] = useState("");
@@ -42,9 +43,9 @@ export function Threats() {
     () => ({
       total: threatLog.length,
       high: threatLog.filter((t) => t.severity === "High").length,
-      active: 6,
+      active: activeSensors,
     }),
-    [threatLog]
+    [threatLog, activeSensors]
   );
 
   useEffect(() => {
@@ -121,11 +122,39 @@ export function Threats() {
       }
     };
 
+    const fetchSensors = async () => {
+      try {
+        const response = await fetch("/api/sensors", {
+          headers: { Accept: "application/json" },
+        });
+        const contentType = response.headers.get("content-type") ?? "";
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        if (!contentType.includes("application/json")) {
+          return;
+        }
+
+        const json = (await response.json()) as {
+          sensors?: Array<{ status?: string }>;
+        };
+
+        const sensorsList = json.sensors ?? [];
+        const count = sensorsList.filter((s) => String(s.status).toLowerCase() === "active").length;
+        if (!cancelled) setActiveSensors(count);
+      } catch {
+        // keep last known value
+      }
+    };
+
     fetchThreats();
+    fetchSensors();
     const interval = window.setInterval(fetchThreats, 2000);
+    const sensorInterval = window.setInterval(fetchSensors, 2000);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      window.clearInterval(sensorInterval);
     };
   }, []);
 

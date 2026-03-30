@@ -34,6 +34,23 @@ def insert_lidar_reading(message: dict) -> None:
 def insert_threat_event(event: dict) -> None:
     db.insert_threat_event(event)
 
+
+def upsert_sensor_health(
+    *,
+    sensor_id: str,
+    sensor_type: str | None,
+    last_seen: str | None,
+    last_error: str | None = None,
+    last_error_at: str | None = None,
+) -> None:
+    db.upsert_sensor_health(
+        sensor_id=sensor_id,
+        sensor_type=sensor_type,
+        last_seen=last_seen,
+        last_error=last_error,
+        last_error_at=last_error_at,
+    )
+
 __all__ = [
     "db",
     "Database",
@@ -42,6 +59,7 @@ __all__ = [
     "insert_radar_reading",
     "insert_lidar_reading",
     "insert_threat_event",
+    "upsert_sensor_health",
     "Sensor",
     "RadarReading",
     "LidarReading",
