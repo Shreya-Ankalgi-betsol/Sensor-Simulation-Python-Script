@@ -4,6 +4,9 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.models.sensor import SensorType
+from app.models.threat_log import ThreatSeverity
+
 
 class BucketBy(str, enum.Enum):
     minute = "minute"
@@ -11,7 +14,21 @@ class BucketBy(str, enum.Enum):
     day = "day"
 
 
-#  A: Threat Timeline 
+# ── Shared filter ─────────────────────────────────────────────────────────────
+
+class AnalyticsFilter(BaseModel):
+    from_dt: Optional[datetime] = None
+    to_dt: Optional[datetime] = None
+    timezone: str = "UTC"
+    location: Optional[str] = None
+    sensor_type: Optional[SensorType] = None
+    severity: Optional[ThreatSeverity] = None
+    threat_type: Optional[str] = None
+    bucket_by: BucketBy = BucketBy.hour
+
+
+# ── A: Threat Timeline ────────────────────────────────────────────────────────
+
 class ThreatTimelinePoint(BaseModel):
     bucket: datetime
     count: int
@@ -22,7 +39,8 @@ class ThreatTimelineOut(BaseModel):
     bucket_by: str
 
 
-#  B: Threats Per Sensor 
+# ── B: Threats Per Sensor ─────────────────────────────────────────────────────
+
 class ThreatPerSensorPoint(BaseModel):
     sensor_id: str
     sensor_type: str
@@ -34,7 +52,7 @@ class ThreatsPerSensorOut(BaseModel):
     data: list[ThreatPerSensorPoint]
 
 
-# C: Severity Breakdown 
+# ── C: Severity Breakdown ─────────────────────────────────────────────────────
 
 class SeverityBreakdownPoint(BaseModel):
     severity: str
@@ -46,9 +64,13 @@ class SeverityBreakdownOut(BaseModel):
     total: int
 
 
-#  Shared filter params 
+# ── D: Threat Type Breakdown ──────────────────────────────────────────────────
 
-class AnalyticsFilter(BaseModel):
-    from_dt: Optional[datetime] = None
-    to_dt: Optional[datetime] = None
-    bucket_by: BucketBy = BucketBy.hour
+class ThreatTypeBreakdownPoint(BaseModel):
+    threat_type: str
+    count: int
+
+
+class ThreatTypeBreakdownOut(BaseModel):
+    data: list[ThreatTypeBreakdownPoint]
+    total: int
