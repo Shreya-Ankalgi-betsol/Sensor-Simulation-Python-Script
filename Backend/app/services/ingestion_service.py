@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.detection import ThreatDetectionService
+from app.logging_config import log_data_saved, log_detection_result, log_tcp_payload_received, log_websocket_broadcast
 from app.models.sensor import Sensor, SensorStatus, SensorType
 from app.models.sensor_reading import LidarReading, RadarReading, ReadingStatus
 from app.models.threat_log import ThreatLog, ThreatSeverity
@@ -24,8 +25,15 @@ class IngestionService:
     ) -> SensorIngestResponse:
         sensor = await self._upsert_sensor(payload, db)
 
+        # Log TCP payload reception
+        log_tcp_payload_received(payload.sensor_id, payload.type)
+
+        # Run threat detection
         detections_payload = self.detector.process(payload.model_dump(mode="json"))
         detected_objects = detections_payload.get("detected_objects", [])
+
+        # Log detection results in real-time
+        log_detection_result(payload.sensor_id, payload.type, detected_objects)
 
         reading_status = ReadingStatus.threat if detected_objects else ReadingStatus.ok
 
@@ -46,6 +54,21 @@ class IngestionService:
 
             await self._mark_stale_sensors_inactive(db)
             await db.flush()
+
+            # Log database saves
+            log_data_saved(
+                f"{payload.type.upper()}_READINGS",
+                payload.sensor_id,
+                1,
+            )
+            if saved_threats > 0:
+                log_data_saved("THREAT_LOGS", payload.sensor_id, saved_threats)
+                # Log WebSocket broadcast
+                max_severity = max(
+                    (obj.get("severity", "low") for obj in detected_objects),
+                    default="low"
+                )
+                log_websocket_broadcast(saved_threats, payload.sensor_id, max_severity)
 
             return SensorIngestResponse(
                 sensor_id=payload.sensor_id,

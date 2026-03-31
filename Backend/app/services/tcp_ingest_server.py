@@ -102,6 +102,11 @@ class TCPIngestServer:
 
         try:
             payload = SensorIngestPayload.model_validate(message)
+            logger.debug(
+                "📩 [TCP VALID] Payload validated | Sensor: %s (%s)",
+                payload.sensor_id,
+                payload.type,
+            )
         except ValidationError as exc:
             logger.warning("Invalid TCP payload: %s", exc)
             return
