@@ -43,6 +43,14 @@ async def create_tables():
         # Step 1 — Create all tables
         await conn.run_sync(Base.metadata.create_all)
 
+        # Step 1.1 — Enforce unique coordinates for sensors
+        await conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_sensors_lat_lng "
+                "ON sensors (lat, lng);"
+            )
+        )
+
         # Step 2 — Convert to hypertables
         await conn.execute(
             text(

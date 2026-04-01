@@ -1,11 +1,14 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select
 
 from app.models.sensor import Sensor, SensorStatus
 from app.schemas.sensor import SensorCreate, SensorOut, SensorSummaryOut, SensorUpdate
+
+COORD_EPSILON = 1e-9
 
 class SensorService:
 
@@ -38,6 +41,24 @@ class SensorService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Sensor '{data.sensor_id}' already exists.",
             )
+
+        duplicate_location_result = await db.execute(
+            select(Sensor).where(
+                func.abs(Sensor.lat - data.lat) <= COORD_EPSILON,
+                func.abs(Sensor.lng - data.lng) <= COORD_EPSILON,
+            )
+        )
+        duplicate_location_sensor = duplicate_location_result.scalar_one_or_none()
+        if duplicate_location_sensor:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "A sensor already exists at the provided coordinates "
+                    f"(lat={data.lat}, lng={data.lng}) with id "
+                    f"'{duplicate_location_sensor.sensor_id}'."
+                ),
+            )
+
         sensor = Sensor(
             sensor_id=data.sensor_id,
             sensor_type=data.sensor_type,
@@ -48,7 +69,15 @@ class SensorService:
             status=SensorStatus.inactive,
         )
         db.add(sensor)
-        await db.flush()
+        try:
+            await db.flush()
+        except IntegrityError:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "A sensor with the same coordinates or id already exists."
+                ),
+            )
         await db.refresh(sensor)
         return SensorOut.model_validate(sensor)
 
@@ -71,7 +100,35 @@ class SensorService:
         if data.coverage_radius_m is not None:
             sensor.coverage_radius_m = data.coverage_radius_m
 
-        await db.flush()
+        target_lat = data.lat if data.lat is not None else sensor.lat
+        target_lng = data.lng if data.lng is not None else sensor.lng
+        duplicate_location_result = await db.execute(
+            select(Sensor).where(
+                Sensor.sensor_id != sensor_id,
+                func.abs(Sensor.lat - target_lat) <= COORD_EPSILON,
+                func.abs(Sensor.lng - target_lng) <= COORD_EPSILON,
+            )
+        )
+        duplicate_location_sensor = duplicate_location_result.scalar_one_or_none()
+        if duplicate_location_sensor:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Another sensor already exists at the provided coordinates "
+                    f"(lat={target_lat}, lng={target_lng}) with id "
+                    f"'{duplicate_location_sensor.sensor_id}'."
+                ),
+            )
+
+        try:
+            await db.flush()
+        except IntegrityError:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "A sensor with the same coordinates already exists."
+                ),
+            )
         await db.refresh(sensor)
         return SensorOut.model_validate(sensor)
 
