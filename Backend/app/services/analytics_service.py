@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Optional
 
-import pytz
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +22,6 @@ from app.schemas.analytics import (
 
 class AnalyticsService:
 
-    
     # ── A: Threat timeline 
 
     async def get_threat_timeline(
@@ -37,22 +35,13 @@ class AnalyticsService:
             filters.sensor_type is not None
         )
 
-        # Choose bucket expression based on bucket_by and timezone
+        # Choose bucket expression based on bucket_by
         if filters.bucket_by == BucketBy.minute:
-            bucket_expr = func.date_trunc(
-                "minute",
-                func.timezone(filters.timezone, ThreatLog.timestamp)
-            )
+            bucket_expr = func.date_trunc("minute", ThreatLog.timestamp)
         elif filters.bucket_by == BucketBy.day:
-            bucket_expr = func.date_trunc(
-                "day",
-                func.timezone(filters.timezone, ThreatLog.timestamp)
-            )
+            bucket_expr = func.date_trunc("day", ThreatLog.timestamp)
         else:
-            bucket_expr = func.date_trunc(
-                "hour",
-                func.timezone(filters.timezone, ThreatLog.timestamp)
-            )
+            bucket_expr = func.date_trunc("hour", ThreatLog.timestamp)
 
         # Build query
         query = select(

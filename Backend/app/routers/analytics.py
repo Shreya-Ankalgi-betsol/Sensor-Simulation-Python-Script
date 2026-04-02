@@ -26,7 +26,6 @@ router = APIRouter(
 def build_filters(
     from_dt: Optional[datetime],
     to_dt: Optional[datetime],
-    timezone: str,
     location: Optional[str],
     sensor_type: Optional[SensorType],
     severity: Optional[ThreatSeverity],
@@ -36,7 +35,6 @@ def build_filters(
     return AnalyticsFilter(
         from_dt=from_dt,
         to_dt=to_dt,
-        timezone=timezone,
         location=location,
         sensor_type=sensor_type,
         severity=severity,
@@ -51,8 +49,7 @@ def build_filters(
     summary="Threat activity over time",
     description=(
         "Returns threat counts grouped into time buckets. "
-        "Frontend sends from_dt, to_dt, timezone and bucket_by. "
-        "Timestamps are converted to the given timezone before bucketing. "
+        "Frontend sends from_dt, to_dt and bucket_by. "
         "bucket_by options: minute, hour, day."
     ),
 )
@@ -60,7 +57,6 @@ async def threat_timeline(
     bucket_by: BucketBy = Query(default=BucketBy.hour, description="minute, hour or day"),
     from_dt: Optional[datetime] = Query(default=None, description="Start datetime (ISO 8601 UTC)"),
     to_dt: Optional[datetime] = Query(default=None, description="End datetime (ISO 8601 UTC)"),
-    timezone: str = Query(default="UTC", description="Timezone e.g. Asia/Kolkata"),
     location: Optional[str] = Query(default=None, description="Sensor location e.g. Main gate"),
     sensor_type: Optional[SensorType] = Query(default=None, description="radar or lidar"),
     severity: Optional[ThreatSeverity] = Query(default=None, description="low, med, high, critical"),
@@ -68,7 +64,7 @@ async def threat_timeline(
     db: AsyncSession = Depends(get_db),
 ) -> ThreatTimelineOut:
     filters = build_filters(
-        from_dt, to_dt, timezone, location, sensor_type, severity, threat_type, bucket_by
+        from_dt, to_dt, location, sensor_type, severity, threat_type, bucket_by
     )
     return await analytics_service.get_threat_timeline(filters, db)
 
@@ -86,7 +82,6 @@ async def threat_timeline(
 async def threats_per_sensor(
     from_dt: Optional[datetime] = Query(default=None, description="Start datetime (ISO 8601 UTC)"),
     to_dt: Optional[datetime] = Query(default=None, description="End datetime (ISO 8601 UTC)"),
-    timezone: str = Query(default="UTC", description="Timezone e.g. Asia/Kolkata"),
     location: Optional[str] = Query(default=None, description="Sensor location e.g. Main gate"),
     sensor_type: Optional[SensorType] = Query(default=None, description="radar or lidar"),
     severity: Optional[ThreatSeverity] = Query(default=None, description="low, med, high, critical"),
@@ -94,7 +89,7 @@ async def threats_per_sensor(
     db: AsyncSession = Depends(get_db),
 ) -> ThreatsPerSensorOut:
     filters = build_filters(
-        from_dt, to_dt, timezone, location, sensor_type, severity, threat_type
+        from_dt, to_dt, location, sensor_type, severity, threat_type
     )
     return await analytics_service.get_threats_per_sensor(filters, db)
 
@@ -112,7 +107,6 @@ async def threats_per_sensor(
 async def severity_breakdown(
     from_dt: Optional[datetime] = Query(default=None, description="Start datetime (ISO 8601 UTC)"),
     to_dt: Optional[datetime] = Query(default=None, description="End datetime (ISO 8601 UTC)"),
-    timezone: str = Query(default="UTC", description="Timezone e.g. Asia/Kolkata"),
     location: Optional[str] = Query(default=None, description="Sensor location e.g. Main gate"),
     sensor_type: Optional[SensorType] = Query(default=None, description="radar or lidar"),
     severity: Optional[ThreatSeverity] = Query(default=None, description="low, med, high, critical"),
@@ -120,7 +114,7 @@ async def severity_breakdown(
     db: AsyncSession = Depends(get_db),
 ) -> SeverityBreakdownOut:
     filters = build_filters(
-        from_dt, to_dt, timezone, location, sensor_type, severity, threat_type
+        from_dt, to_dt, location, sensor_type, severity, threat_type
     )
     return await analytics_service.get_severity_breakdown(filters, db)
 
@@ -138,7 +132,6 @@ async def severity_breakdown(
 async def threat_type_breakdown(
     from_dt: Optional[datetime] = Query(default=None, description="Start datetime (ISO 8601 UTC)"),
     to_dt: Optional[datetime] = Query(default=None, description="End datetime (ISO 8601 UTC)"),
-    timezone: str = Query(default="UTC", description="Timezone e.g. Asia/Kolkata"),
     location: Optional[str] = Query(default=None, description="Sensor location e.g. Main gate"),
     sensor_type: Optional[SensorType] = Query(default=None, description="radar or lidar"),
     severity: Optional[ThreatSeverity] = Query(default=None, description="low, med, high, critical"),
@@ -146,6 +139,6 @@ async def threat_type_breakdown(
     db: AsyncSession = Depends(get_db),
 ) -> ThreatTypeBreakdownOut:
     filters = build_filters(
-        from_dt, to_dt, timezone, location, sensor_type, severity, threat_type
+        from_dt, to_dt, location, sensor_type, severity, threat_type
     )
     return await analytics_service.get_threat_type_breakdown(filters, db)

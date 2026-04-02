@@ -19,7 +19,6 @@ class BucketBy(str, enum.Enum):
 class AnalyticsFilter(BaseModel):
     from_dt: Optional[datetime] = None
     to_dt: Optional[datetime] = None
-    timezone: str = "UTC"
     location: Optional[str] = None
     sensor_type: Optional[SensorType] = None
     severity: Optional[ThreatSeverity] = None

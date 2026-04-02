@@ -4,4 +4,3 @@ sqlalchemy
 asyncpg
 pydantic-settings
 python-dotenv
-pytz
