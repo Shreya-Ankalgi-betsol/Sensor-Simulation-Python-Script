@@ -20,11 +20,13 @@ class SessionManager:
             "WS client connected. Total connections: %d",
             len(self.active_connections),
         )
-        await self.send_to_client(
-            websocket,
-            event="auth_confirmed",
-            data={"message": "Connected to Sensor Simulation", "status": "live"},
-        )
+        # Send connection confirmation in frontend format
+        payload = json.dumps({"type": "CONNECTION_CONFIRMED", "payload": {"message": "Connected to threat detection system", "status": "live"}})
+        try:
+            await websocket.send_text(payload)
+            logger.debug("Connection confirmation sent to client")
+        except Exception as exc:
+            logger.warning("Failed to send connection confirmation: %s", exc)
 
     def disconnect(self, websocket: WebSocket) -> None:
         if websocket in self.active_connections:
@@ -79,6 +81,29 @@ class SessionManager:
                 await connection.send_text(payload)
             except Exception as exc:
                 logger.warning("Broadcast failed for a client (%s) — removing.", exc)
+                dead.append(connection)
+
+        for ws in dead:
+            self.disconnect(ws)
+
+    # Broadcast threat in frontend format (type/payload)
+
+    async def broadcast_threat(self, threat_data: Any) -> None:
+        """Broadcast threat detection event to all connected clients in frontend format."""
+        if not self.active_connections:
+            logger.debug("No active connections to broadcast threat to")
+            return
+
+        # Format: {type, payload} - expected by frontend WebSocket listener
+        payload = json.dumps({"type": "NEW_THREAT", "payload": threat_data}, default=str)
+        dead: list[WebSocket] = []
+
+        for connection in self.active_connections:
+            try:
+                await connection.send_text(payload)
+                logger.debug("Threat broadcast sent to client")
+            except Exception as exc:
+                logger.warning("Threat broadcast failed for a client (%s) — removing.", exc)
                 dead.append(connection)
 
         for ws in dead:

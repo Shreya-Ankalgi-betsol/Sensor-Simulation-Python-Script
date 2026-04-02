@@ -177,10 +177,12 @@ class IngestionService:
                 timestamp=payload.timestamp,
             )
             db.add(threat)
+            await db.flush()  # Flush to generate alert_id from database
             saved += 1
 
             await threat_service.push_alert(
                 {
+                    "alert_id": threat.alert_id,
                     "sensor_id": payload.sensor_id,
                     "sensor_type": payload.type,
                     "threat_type": threat.threat_type,

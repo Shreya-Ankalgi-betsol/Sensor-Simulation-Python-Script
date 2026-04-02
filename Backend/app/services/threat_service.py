@@ -122,7 +122,8 @@ class ThreatService:
     #  Push alert (called by detection engine) 
 
     async def push_alert(self, alert_data: dict) -> None:
-        await session_manager.broadcast("alert_new", alert_data)
+        # Broadcast threat to all connected WebSocket clients in frontend format
+        await session_manager.broadcast_threat(alert_data)
     
     async def get_threat_summary(self, db: AsyncSession) -> ThreatSummaryOut:
         # Total threats
