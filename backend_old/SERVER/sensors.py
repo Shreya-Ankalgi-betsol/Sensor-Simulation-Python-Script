@@ -35,6 +35,8 @@ class RadarSensor(Sensor):
             "sensor_id": self.sensor_id,
             "type": "radar",
             "timestamp": datetime.utcnow().isoformat() + "Z",
+                "lat": self.latitude,
+                "lng": self.longitude,
             "raw_detection": {
                 "range_m": round(random.uniform(1, 150), 2),
                 "azimuth_deg": round(random.uniform(-60, 60), 2),
@@ -82,6 +84,8 @@ class LidarSensor(Sensor):
             "sensor_id": self.sensor_id,
             "type": "lidar",
             "timestamp": datetime.utcnow().isoformat() + "Z",
+                "lat": self.latitude,
+                "lng": self.longitude,
             "raw_detection": {
                 "bounding_box": {
                     "x_min": x_min,

@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     # Database
     db_user: str = "sensor"
     db_password: str = "sensor_pass"
-    db_host: str = "localhost"
+    db_host: str = "127.0.0.1"
     db_port: int = 5432
     db_name: str = "sensor_simulation"
 
