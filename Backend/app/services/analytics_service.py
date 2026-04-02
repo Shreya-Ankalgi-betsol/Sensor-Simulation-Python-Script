@@ -23,47 +23,8 @@ from app.schemas.analytics import (
 
 class AnalyticsService:
 
-    # # ── Shared: build filtered query with JOINs ───────────────────────────────
-
-    # def _build_base_query(self, filters: AnalyticsFilter):
-    #     """
-    #     Builds a base query on ThreatLog with optional JOIN to Sensor.
-    #     Applies all shared filters — location, sensor_type, severity,
-    #     threat_type, from_dt, to_dt.
-    #     """
-    #     needs_sensor_join = (
-    #         filters.location is not None or
-    #         filters.sensor_type is not None
-    #     )
-
-    #     query = select(ThreatLog)
-
-    #     if needs_sensor_join:
-    #         query = query.join(Sensor, ThreatLog.sensor_id == Sensor.sensor_id)
-
-    #     if filters.location is not None:
-    #         query = query.where(Sensor.location == filters.location)
-    #     if filters.sensor_type is not None:
-    #         query = query.where(Sensor.sensor_type == filters.sensor_type)
-    #     if filters.severity is not None:
-    #         query = query.where(ThreatLog.severity == filters.severity)
-    #     if filters.threat_type is not None:
-    #         query = query.where(ThreatLog.threat_type == filters.threat_type)
-    #     if filters.from_dt is not None:
-    #         query = query.where(ThreatLog.timestamp >= filters.from_dt)
-    #     if filters.to_dt is not None:
-    #         query = query.where(ThreatLog.timestamp <= filters.to_dt)
-
-    #     return query
-
-    # def _get_tz(self, timezone: str):
-    #     """Safely get pytz timezone — falls back to UTC if invalid."""
-    #     try:
-    #         return pytz.timezone(timezone)
-    #     except pytz.exceptions.UnknownTimeZoneError:
-    #         return pytz.utc
-
-    # ── A: Threat timeline ────────────────────────────────────────────────────
+    
+    # ── A: Threat timeline 
 
     async def get_threat_timeline(
     self,
@@ -134,7 +95,7 @@ class AnalyticsService:
         )
 
 
-    # ── B: Threats per sensor ─────────────────────────────────────────────────
+    # ── B: Threats per sensor 
 
     async def get_threats_per_sensor(
         self,
@@ -190,7 +151,7 @@ class AnalyticsService:
             ]
         )
 
-    # ── C: Severity breakdown ─────────────────────────────────────────────────
+    # ── C: Severity breakdown 
 
     async def get_severity_breakdown(
         self,

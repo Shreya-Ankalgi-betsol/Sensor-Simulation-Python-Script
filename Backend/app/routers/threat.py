@@ -34,7 +34,9 @@ async def get_threat_summary(
     ),
 )
 async def get_threats(
+    sensor_type: str | None = None,
     sensor_id: str | None = None,
+    threat_type: str | None = None,
     severity: str | None = None,
     from_dt: str | None = None,
     to_dt: str | None = None,
@@ -43,7 +45,9 @@ async def get_threats(
     db: AsyncSession = Depends(get_db),
 ) -> PagedThreats:
     filters = ThreatFilter(
+        sensor_type=sensor_type,
         sensor_id=sensor_id,
+        threat_type=threat_type,
         severity=severity,
         from_dt=from_dt,
         to_dt=to_dt,

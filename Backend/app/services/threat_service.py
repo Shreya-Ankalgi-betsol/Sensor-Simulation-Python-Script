@@ -36,8 +36,12 @@ class ThreatService:
         query = select(ThreatLog)
 
         # Apply filters
+        if filters.sensor_type is not None:
+            query = query.where(ThreatLog.sensor_type == filters.sensor_type)
         if filters.sensor_id is not None:
             query = query.where(ThreatLog.sensor_id == filters.sensor_id)
+        if filters.threat_type is not None:
+            query = query.where(ThreatLog.threat_type == filters.threat_type)
         if filters.severity is not None:
             query = query.where(ThreatLog.severity == filters.severity)
         if filters.from_dt is not None:
