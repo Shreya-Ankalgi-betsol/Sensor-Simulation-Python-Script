@@ -21,7 +21,7 @@ class SensorCreate(BaseModel):
 class SensorUpdate(BaseModel):
     lat: Optional[float] = Field(default=None, ge=-90, le=90)
     lng: Optional[float] = Field(default=None, ge=-180, le=180)
-    location: str
+    location: Optional[str] = Field(default=None)
     coverage_radius_m: Optional[float] = Field(default=None, gt=0)
 
 

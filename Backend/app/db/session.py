@@ -1,16 +1,20 @@
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+import logging
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.debug,
+    echo=True,  # Re-enable to see actual SQL statements
     pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
+    pool_size=20,
+    max_overflow=30,
+    pool_recycle=3600,
     connect_args={"ssl": False},
 )
 
@@ -31,8 +35,11 @@ async def get_db():
     async with AsyncSessionLocal() as session:
         try:
             yield session
+            logger.debug("Committing session changes...")
             await session.commit()
-        except Exception:
+            logger.debug("Session committed successfully")
+        except Exception as e:
+            logger.error(f"Error in session, rolling back: {e}", exc_info=True)
             await session.rollback()
             raise
         finally:

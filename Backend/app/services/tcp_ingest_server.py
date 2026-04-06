@@ -54,7 +54,7 @@ class TCPIngestServer:
             self._client_tasks.add(task)
 
         peer = writer.get_extra_info("peername")
-        logger.info("TCP client connected: %s", peer)
+        # logger.info("TCP client connected: %s", peer)  # COMMENTED OUT for debugging sensor updates
 
         decoder = json.JSONDecoder()
         buffer = ""
@@ -77,7 +77,7 @@ class TCPIngestServer:
                 self._client_tasks.discard(task)
             writer.close()
             await writer.wait_closed()
-            logger.info("TCP client disconnected: %s", peer)
+            # logger.info("TCP client disconnected: %s", peer)  # COMMENTED OUT for debugging sensor updates
 
     async def _process_buffer(self, buffer: str, decoder: json.JSONDecoder) -> str:
         while buffer:
@@ -102,11 +102,11 @@ class TCPIngestServer:
 
         try:
             payload = SensorIngestPayload.model_validate(message)
-            logger.debug(
-                "📩 [TCP VALID] Payload validated | Sensor: %s (%s)",
-                payload.sensor_id,
-                payload.type,
-            )
+            # logger.debug(  # COMMENTED OUT for debugging sensor updates
+            #     "📩 [TCP VALID] Payload validated | Sensor: %s (%s)",
+            #     payload.sensor_id,
+            #     payload.type,
+            # )
         except ValidationError as exc:
             logger.warning("Invalid TCP payload: %s", exc)
             return

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
@@ -8,6 +9,7 @@ from sqlalchemy import func, select
 from app.models.sensor import Sensor, SensorStatus
 from app.schemas.sensor import SensorCreate, SensorOut, SensorSummaryOut, SensorUpdate
 
+logger = logging.getLogger(__name__)
 COORD_EPSILON = 1e-9
 
 class SensorService:
@@ -85,20 +87,30 @@ class SensorService:
     async def update_sensor(
         self, sensor_id: str, data: SensorUpdate, db: AsyncSession
     ) -> SensorOut:
+        logger.info(f"Updating sensor {sensor_id} with data: {data}")
+        
         sensor = await db.get(Sensor, sensor_id)
         if not sensor:
+            logger.warning(f"Sensor {sensor_id} not found")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Sensor '{sensor_id}' not found.",
             )
+        
+        logger.debug(f"Current sensor state: lat={sensor.lat}, lng={sensor.lng}, location={sensor.location}")
+        
+        # Build update data
+        update_dict = {}
         if data.lat is not None:
-            sensor.lat = data.lat
+            update_dict["lat"] = data.lat
         if data.lng is not None:
-            sensor.lng = data.lng
+            update_dict["lng"] = data.lng
         if data.location is not None:
-            sensor.location = data.location
+            update_dict["location"] = data.location
         if data.coverage_radius_m is not None:
-            sensor.coverage_radius_m = data.coverage_radius_m
+            update_dict["coverage_radius_m"] = data.coverage_radius_m
+
+        logger.debug(f"Update dict: {update_dict}")
 
         target_lat = data.lat if data.lat is not None else sensor.lat
         target_lng = data.lng if data.lng is not None else sensor.lng
@@ -111,6 +123,7 @@ class SensorService:
         )
         duplicate_location_sensor = duplicate_location_result.scalar_one_or_none()
         if duplicate_location_sensor:
+            logger.warning(f"Duplicate location found for sensor {sensor_id}")
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
@@ -120,16 +133,26 @@ class SensorService:
                 ),
             )
 
+        # Apply updates to sensor object
+        for key, value in update_dict.items():
+            setattr(sensor, key, value)
+        
+        db.add(sensor)
         try:
             await db.flush()
-        except IntegrityError:
+            logger.info(f"Flushed changes for sensor {sensor_id}")
+        except IntegrityError as e:
+            logger.error(f"Integrity error when updating sensor {sensor_id}: {e}")
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
                     "A sensor with the same coordinates already exists."
                 ),
             )
+        
         await db.refresh(sensor)
+        logger.info(f"Refreshed sensor {sensor_id}: lat={sensor.lat}, lng={sensor.lng}, location={sensor.location}")
+        
         return SensorOut.model_validate(sensor)
 
     #  Sensor summary

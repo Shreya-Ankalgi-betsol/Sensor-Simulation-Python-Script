@@ -16,25 +16,25 @@ class SessionManager:
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self.active_connections.append(websocket)
-        logger.info(
-            "WS client connected. Total connections: %d",
-            len(self.active_connections),
-        )
+        # logger.info(  # COMMENTED OUT for debugging sensor updates
+        #     "WS client connected. Total connections: %d",
+        #     len(self.active_connections),
+        # )
         # Send connection confirmation in frontend format
         payload = json.dumps({"type": "CONNECTION_CONFIRMED", "payload": {"message": "Connected to threat detection system", "status": "live"}})
         try:
             await websocket.send_text(payload)
-            logger.debug("Connection confirmation sent to client")
+            # logger.debug("Connection confirmation sent to client")  # COMMENTED OUT for debugging sensor updates
         except Exception as exc:
             logger.warning("Failed to send connection confirmation: %s", exc)
 
     def disconnect(self, websocket: WebSocket) -> None:
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-        logger.info(
-            "WS client disconnected. Remaining: %d",
-            len(self.active_connections),
-        )
+        # logger.info(  # COMMENTED OUT for debugging sensor updates
+        #     "WS client disconnected. Remaining: %d",
+        #     len(self.active_connections),
+        # )
 
     #  Listening loop 
 
@@ -91,7 +91,7 @@ class SessionManager:
     async def broadcast_threat(self, threat_data: Any) -> None:
         """Broadcast threat detection event to all connected clients in frontend format."""
         if not self.active_connections:
-            logger.debug("No active connections to broadcast threat to")
+            # logger.debug("No active connections to broadcast threat to")  # COMMENTED OUT for debugging sensor updates
             return
 
         # Format: {type, payload} - expected by frontend WebSocket listener
@@ -101,7 +101,7 @@ class SessionManager:
         for connection in self.active_connections:
             try:
                 await connection.send_text(payload)
-                logger.debug("Threat broadcast sent to client")
+                # logger.debug("Threat broadcast sent to client")  # COMMENTED OUT for debugging sensor updates
             except Exception as exc:
                 logger.warning("Threat broadcast failed for a client (%s) — removing.", exc)
                 dead.append(connection)
