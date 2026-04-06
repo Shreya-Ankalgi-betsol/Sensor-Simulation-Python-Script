@@ -102,12 +102,6 @@ class IngestionService:
             return sensor
 
         sensor.sensor_type = SensorType(payload.type)
-        if payload.lat is not None:
-            sensor.lat = payload.lat
-        if payload.lng is not None:
-            sensor.lng = payload.lng
-        if payload.location is not None:
-            sensor.location = payload.location
 
         return sensor
 

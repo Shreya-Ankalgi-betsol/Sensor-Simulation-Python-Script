@@ -56,6 +56,15 @@ def _build_sensor(sensor_payload):
     return None
 
 
+def _refresh_sensor_coordinates(sensor, sensor_payload):
+    try:
+        sensor.latitude = float(sensor_payload.get("lat", sensor.latitude))
+        sensor.longitude = float(sensor_payload.get("lng", sensor.longitude))
+    except (TypeError, ValueError):
+        # Keep the last known coordinates if the backend payload is malformed.
+        pass
+
+
 def sensor_thread(sensor, stop_event):
     while not stop_event.is_set():
         client = None
@@ -130,6 +139,9 @@ def sync_sensors_from_backend():
 
             with sensor_lock:
                 if sensor.sensor_id in sensor_threads:
+                    existing_stream = sensor_threads[sensor.sensor_id]
+                    existing_sensor = existing_stream["sensor"]
+                    _refresh_sensor_coordinates(existing_sensor, sensor_payload)
                     continue
 
                 stop_event = threading.Event()
@@ -143,6 +155,7 @@ def sync_sensors_from_backend():
                 sensor_threads[sensor.sensor_id] = {
                     "thread": thread,
                     "stop_event": stop_event,
+                    "sensor": sensor,
                 }
                 thread.start()
                 new_streams += 1
