@@ -6,23 +6,41 @@ import {
   ReactNode,
 } from 'react'
 import { mockWS, WSMessage } from '../services/WebSocketClient'
-import { ThreatLog } from '../types/api'
+import { ThreatLog, ThreatSummaryOut } from '../types/api'
 import { useSensors } from './SensorContext'
+import { apiGet } from '../services/apiClient'
 
 interface WebSocketContextType {
   liveThreats: ThreatLog[]        // All threats including new live ones
+  threatSummary: ThreatSummaryOut | null  // Real-time threat summary from backend
   isConnected: boolean
 }
 
 const WebSocketContext = createContext<WebSocketContextType>({
   liveThreats: [],
+  threatSummary: null,
   isConnected: false,
 })
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const { updateSensor } = useSensors()
   const [liveThreats, setLiveThreats] = useState<ThreatLog[]>([])
+  const [threatSummary, setThreatSummary] = useState<ThreatSummaryOut | null>(null)
   const [isConnected, setIsConnected] = useState(false)
+
+  // Fetch initial summary on mount
+  useEffect(() => {
+    const fetchInitialSummary = async () => {
+      try {
+        const summary = await apiGet<ThreatSummaryOut>('/api/v1/threats/summary')
+        setThreatSummary(summary)
+        console.log('[WebSocket] Initial summary loaded:', summary)
+      } catch (err) {
+        console.error('[WebSocket] Error fetching initial summary:', err)
+      }
+    }
+    fetchInitialSummary()
+  }, [])
 
   useEffect(() => {
     // Start the real WebSocket connection
@@ -49,7 +67,18 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         setIsConnected(true)
       }
 
-      
+      if (message.type === 'THREAT_SUMMARY_UPDATE') {
+        // Update threat summary from backend broadcast
+        console.log('[WebSocket] Summary update:', message.payload)
+        setThreatSummary(message.payload)
+      }
+
+      if (message.type === 'SENSOR_UPDATE') {
+        // Update the sensor status in SensorContext
+        updateSensor(message.payload.sensor_id, {
+          status: message.payload.status,
+        })
+      }
     })
 
     // Set connected status after initial setup
@@ -64,7 +93,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   }, [updateSensor])
 
   return (
-    <WebSocketContext.Provider value={{ liveThreats, isConnected }}>
+    <WebSocketContext.Provider value={{ liveThreats, threatSummary, isConnected }}>
       {children}
     </WebSocketContext.Provider>
   )

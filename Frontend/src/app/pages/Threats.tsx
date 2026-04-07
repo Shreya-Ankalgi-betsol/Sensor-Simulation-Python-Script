@@ -1,13 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import DatePicker from 'react-datepicker'
-import 'react-datepicker/dist/react-datepicker.css'
 import { ChevronDown, ChevronLeft, ChevronRight, RotateCcw, Calendar, Clock } from "lucide-react";
 import { useWebSocket } from '../context/WebSocketContext'
 import { useSensors } from "../context/SensorContext";
 import { apiGet, APIError } from '../services/apiClient';
-import { ThreatLog, ThreatSummaryOut, PagedThreats } from '../types/api';
-import { parseISO } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
+import { ThreatLog, PagedThreats } from '../types/api';
 
 // Common IANA timezones for date-fns-tz support
 const COMMON_TIMEZONES = [
@@ -44,9 +41,8 @@ const COMMON_TIMEZONES = [
 
 export function Threats() {
   const { sensorList, loading: sensorsLoading } = useSensors();
-  const { liveThreats } = useWebSocket()
+  const { liveThreats, threatSummary } = useWebSocket()
   const [threats, setThreats] = useState<ThreatLog[]>([]);
-  const [threatSummary, setThreatSummary] = useState<ThreatSummaryOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -147,10 +143,7 @@ export function Threats() {
       params.append("page_size", "20");
 
       const url = `/api/v1/threats?${params.toString()}`;
-      const [pagedThreats, summary] = await Promise.all([
-        apiGet<PagedThreats>(url),
-        isInitial ? apiGet<ThreatSummaryOut>('/api/v1/threats/summary') : Promise.resolve(null),
-      ]);
+      const pagedThreats = await apiGet<PagedThreats>(url);
       
       if (isInitial) {
         setThreats(pagedThreats.items);
@@ -166,9 +159,6 @@ export function Threats() {
       
       setNextCursor(pagedThreats.next_cursor);
       setHasMore(pagedThreats.has_more);
-      if (summary) {
-        setThreatSummary(summary);
-      }
     } catch (err) {
       const message = err instanceof APIError ? err.message : 'Failed to fetch threats';
       setError(message);
@@ -246,10 +236,11 @@ export function Threats() {
     return () => container.removeEventListener('scroll', listener);
   }, [nextCursor, hasMore, loadingMore, fetchThreats]);
 
+  // Get threat summary from WebSocket context (broadcast by backend in real-time)
   const stats = {
-    total: threatSummary?.total_threats ?? threats.length,
-    high: threatSummary?.high_severity_count ?? threats.filter((t) => t.severity === "high").length,
-    active: threatSummary?.active_sensor_count ?? 6,
+    total: threatSummary?.total_threats ?? 0,
+    high: threatSummary?.high_severity_count ?? 0,
+    active: threatSummary?.active_sensor_count ?? 0,
   };
 
   const getSeverityColor = (severity: string) => {

@@ -186,7 +186,8 @@ class IngestionService:
                     "confidence": threat.confidence,
                     "severity": threat.severity.value,
                     "timestamp": payload.timestamp.isoformat(),
-                }
+                },
+                db=db,
             )
 
         return saved

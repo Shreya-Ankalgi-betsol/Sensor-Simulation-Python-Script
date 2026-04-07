@@ -125,9 +125,13 @@ class ThreatService:
 
     #  Push alert (called by detection engine) 
 
-    async def push_alert(self, alert_data: dict) -> None:
+    async def push_alert(self, alert_data: dict, db: AsyncSession | None = None) -> None:
         # Broadcast threat to all connected WebSocket clients in frontend format
         await session_manager.broadcast_threat(alert_data)
+        
+        # Also broadcast updated summary stats after threat is persisted
+        if db:
+            await self.broadcast_summary_update(db)
     
     async def get_threat_summary(self, db: AsyncSession) -> ThreatSummaryOut:
         # Total threats
@@ -157,6 +161,11 @@ class ThreatService:
             high_severity_count=high_severity_count,
             active_sensor_count=active_sensor_count,
         )
+    
+    async def broadcast_summary_update(self, db: AsyncSession) -> None:
+        """Calculate current threat summary and broadcast to all connected clients."""
+        summary = await self.get_threat_summary(db)
+        await session_manager.broadcast_summary_update(summary.model_dump())
 
 
 threat_service = ThreatService()
