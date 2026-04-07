@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { tickerMessages } from '../data/mockData';
+//import { tickerMessages } from '../data/mockData';
 
 export function AlertTicker() {
-  const [messages, setMessages] = useState(tickerMessages);
+  const messages = tickerMessages;
   const [offset, setOffset] = useState(0);
 
   useEffect(() => {

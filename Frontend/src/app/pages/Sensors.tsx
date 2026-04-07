@@ -72,7 +72,7 @@ export function Sensors() {
     setEditingSensor(sensor);
     setFormData({
       sensor_id: sensor.sensor_id,
-      sensor_type: sensor.sensor_type,
+      sensor_type: sensor.sensor_type as 'radar' | 'lidar',
       location: sensor.location,
       lat: sensor.lat,
       lng: sensor.lng,

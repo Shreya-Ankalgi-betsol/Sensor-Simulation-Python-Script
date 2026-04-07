@@ -5,7 +5,7 @@ import {
   useState,
   ReactNode,
 } from 'react'
-import { mockWS, WSMessage } from '../services/mockWebSocket'
+import { mockWS, WSMessage } from '../services/WebSocketClient'
 import { ThreatLog } from '../types/api'
 import { useSensors } from './SensorContext'
 
@@ -49,12 +49,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         setIsConnected(true)
       }
 
-      if (message.type === 'SENSOR_UPDATE') {
-        // Update the sensor status in SensorContext
-        updateSensor(message.payload.sensor_id, {
-          status: message.payload.status,
-        })
-      }
+      
     })
 
     // Set connected status after initial setup
