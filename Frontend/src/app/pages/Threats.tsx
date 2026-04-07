@@ -701,6 +701,46 @@ export function Threats() {
               </div>
             </div>
 
+            {/* Timezone */}
+            <div className="flex-1 min-w-[150px]">
+              <label
+                className="block mb-2"
+                style={{
+                  fontSize: "0.71875rem",
+                  color: "var(--text-secondary)",
+                  fontFamily: "var(--font-mono)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  fontWeight: 600,
+                }}
+              >
+                Timezone
+              </label>
+              <div className="relative">
+                <select
+                  value={timezone}
+                  onChange={(e) => setTimezone(e.target.value)}
+                  className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
+                  style={{
+                    background: "#FFFFFF",
+                    border: "1px solid #E2E8F0",
+                    borderRadius: "6px",
+                    color: "var(--text-primary)",
+                    fontSize: "1.00625rem",
+                  }}
+                >
+                  {COMMON_TIMEZONES.map((tz) => (
+                    <option key={tz} value={tz}>{tz}</option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={16}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                  style={{ color: "var(--accent-cyan)" }}
+                />
+              </div>
+            </div>
+
             {/* Reset Button */}
             <div>
               <button
@@ -790,46 +830,6 @@ export function Threats() {
                     minDate={fromDateTime || undefined}
                     isClearable
                   />
-                </div>
-
-                {/* Timezone */}
-                <div className="flex-1 min-w-[150px]">
-                  <label
-                    className="block mb-2"
-                    style={{
-                      fontSize: "0.71875rem",
-                      color: "var(--text-secondary)",
-                      fontFamily: "var(--font-mono)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                      fontWeight: 600,
-                    }}
-                  >
-                    TIMEZONE
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={timezone}
-                      onChange={(e) => setTimezone(e.target.value)}
-                      className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
-                      style={{
-                        background: "#FFFFFF",
-                        border: "1px solid #E2E8F0",
-                        borderRadius: "6px",
-                        color: "var(--text-primary)",
-                        fontSize: "1.00625rem",
-                      }}
-                    >
-                      {COMMON_TIMEZONES.map((tz) => (
-                        <option key={tz} value={tz}>{tz}</option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      size={16}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                      style={{ color: "var(--accent-cyan)" }}
-                    />
-                  </div>
                 </div>
 
                 {/* Apply Button */}
