@@ -83,6 +83,9 @@ class IngestionService:
             await db.flush()
             raise
 
+    async def mark_stale_sensors_inactive(self, db: AsyncSession) -> None:
+        await self._mark_stale_sensors_inactive(db)
+
     async def _upsert_sensor(self, payload: SensorIngestPayload, db: AsyncSession) -> Sensor:
         sensor = await db.get(Sensor, payload.sensor_id)
 
