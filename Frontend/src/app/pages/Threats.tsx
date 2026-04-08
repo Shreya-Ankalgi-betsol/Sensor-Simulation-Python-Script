@@ -344,7 +344,7 @@ export function Threats() {
         ref={onScroll}
         className="threat-table-container overflow-auto"
         style={{
-          maxHeight: "calc(100vh - 520px)",
+          maxHeight: "calc(100vh - 340px)",
           overflowY: "auto",
           scrollbarWidth: "thin",
           scrollbarColor: "#CBD5E1 #F1F5F9",
@@ -765,7 +765,7 @@ export function Threats() {
                   <div
                     className="font-heading mb-1"
                     style={{
-                      fontSize: "2.59375rem",
+                      fontSize: "1.58125rem",
                       fontWeight: 700,
                       color: "var(--text-primary)",
                       lineHeight: 1,
@@ -793,7 +793,7 @@ export function Threats() {
               <>
                 {/* Connection Status Bar */}
                 <div
-                  className="rounded-lg p-4 flex items-center justify-between"
+                  className="rounded-lg p-1 flex items-center justify-between"
                   style={{
                     background: "var(--bg-card)",
                     border: "1px solid var(--border-color)",
@@ -818,7 +818,7 @@ export function Threats() {
                           className="w-3 h-3 rounded-full animate-pulse"
                           style={{ background: '#16A34A' }}
                         />
-                        <span style={{ color: 'var(--text-primary)', fontSize: '1.00625rem', fontWeight: 500 }}>
+                        <span style={{ color: '#16A34A', fontSize: '1.00625rem', fontWeight: 500 }}>
                           CONNECTED — Live data streaming
                         </span>
                       </>
@@ -830,7 +830,7 @@ export function Threats() {
                           className="w-3 h-3 rounded-full"
                           style={{ background: '#DC2626' }}
                         />
-                        <span style={{ color: 'var(--text-primary)', fontSize: '1.00625rem', fontWeight: 500 }}>
+                        <span style={{ color: '#DC2626', fontSize: '1.00625rem', fontWeight: 500 }}>
                           DISCONNECTED
                         </span>
                       </>
@@ -889,13 +889,14 @@ export function Threats() {
                 {/* Stream Stopped Banner */}
                 {isStreamStopped && (
                   <div
-                    className="rounded-lg p-4"
+                    className="rounded-lg p-1"
                     style={{
                       background: '#FEF3C7',
                       border: '1px solid #FCD34D',
                       color: '#D97706',
                       fontSize: '1.00625rem',
                       fontWeight: 500,
+                      marginTop: '4px',
                     }}
                   >
                     ⏸ Stream stopped — showing last received data

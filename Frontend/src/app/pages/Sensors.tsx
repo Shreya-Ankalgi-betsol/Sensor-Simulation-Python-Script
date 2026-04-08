@@ -214,7 +214,7 @@ export function Sensors() {
       )}
 
       {/* Page Header with Add Sensor Button */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-center justify-between">
         <div>
           <h1
             className="font-heading"
@@ -229,7 +229,7 @@ export function Sensors() {
         </div>
 
         {/* Add Sensor Button */}
-        <div style={{ marginTop: '40px' }}>
+        <div style={{ marginTop: '0px' }}>
           <button
             onClick={openAddModal}
             disabled={loading}
@@ -306,7 +306,7 @@ export function Sensors() {
             <div
               className="font-heading mb-1"
               style={{
-                fontSize: "2.59375rem",
+                fontSize: "1.58125rem",
                 fontWeight: 700,
                 color: "var(--text-primary)",
                 lineHeight: 1,
