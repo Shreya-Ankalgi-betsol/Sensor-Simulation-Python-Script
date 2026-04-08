@@ -109,5 +109,24 @@ class SessionManager:
         for ws in dead:
             self.disconnect(ws)
 
+    async def broadcast_summary_update(self, summary_data: Any) -> None:
+        """Broadcast updated threat summary to all connected clients."""
+        if not self.active_connections:
+            return
+
+        # Format: {type, payload} - consistent with NEW_THREAT format
+        payload = json.dumps({"type": "THREAT_SUMMARY_UPDATE", "payload": summary_data}, default=str)
+        dead: list[WebSocket] = []
+
+        for connection in self.active_connections:
+            try:
+                await connection.send_text(payload)
+            except Exception as exc:
+                logger.warning("Summary broadcast failed for a client (%s) — removing.", exc)
+                dead.append(connection)
+
+        for ws in dead:
+            self.disconnect(ws)
+
 
 session_manager = SessionManager()

@@ -157,10 +157,7 @@ export function Threats() {
       params.append("page_size", "20");
 
       const url = `/api/v1/threats?${params.toString()}`;
-      const [pagedThreats, summary] = await Promise.all([
-        apiGet<PagedThreats>(url),
-        isInitial ? apiGet<ThreatSummaryOut>('/api/v1/threats/summary') : Promise.resolve(null),
-      ]);
+      const pagedThreats = await apiGet<PagedThreats>(url);
       
       if (isInitial) {
         setLogThreats(pagedThreats.items);
@@ -174,9 +171,6 @@ export function Threats() {
       
       setNextCursor(pagedThreats.next_cursor);
       setHasMore(pagedThreats.has_more);
-      if (summary) {
-        setThreatLogSummary(summary);
-      }
     } catch (err) {
       const message = err instanceof APIError ? err.message : 'Failed to fetch threats';
       setError(message);
