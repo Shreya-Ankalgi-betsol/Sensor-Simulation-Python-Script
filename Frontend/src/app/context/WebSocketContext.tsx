@@ -9,7 +9,6 @@ import {
 import { mockWS, WSMessage } from '../services/WebSocketClient'
 import { ThreatLog, ThreatSummaryOut } from '../types/api'
 import { useSensors } from './SensorContext'
-import { apiGet } from '../services/apiClient'
 
 interface WebSocketContextType {
   liveThreats: ThreatLog[]        // All threats including new live ones
@@ -28,23 +27,8 @@ const WebSocketContext = createContext<WebSocketContextType>({
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const { updateSensor } = useSensors()
   const [liveThreats, setLiveThreats] = useState<ThreatLog[]>([])
-  const [threatSummary, setThreatSummary] = useState<ThreatSummaryOut | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
-
-  // Fetch initial summary on mount
-  useEffect(() => {
-    const fetchInitialSummary = async () => {
-      try {
-        const summary = await apiGet<ThreatSummaryOut>('/api/v1/threats/summary')
-        setThreatSummary(summary)
-        console.log('[WebSocket] Initial summary loaded:', summary)
-      } catch (err) {
-        console.error('[WebSocket] Error fetching initial summary:', err)
-      }
-    }
-    fetchInitialSummary()
-  }, [])
 
   useEffect(() => {
     // Auto-connect on mount and keep connection always open
@@ -82,9 +66,17 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }
   }, [updateSensor])
 
+  // Calculate threat summary from live threats for the live stream tab
+  const liveThreatSummary: ThreatSummaryOut = {
+    total_threats: liveThreats.length,
+    high_severity_count: liveThreats.filter(t => t.severity === 'high').length,
+    active_sensor_count: 0, // This will be calculated in Threats.tsx using sensor list
+  }
+
   return (
     <WebSocketContext.Provider value={{ 
       liveThreats, 
+      threatSummary: liveThreatSummary,
       isConnected, 
       connectionStatus,
     }}>
