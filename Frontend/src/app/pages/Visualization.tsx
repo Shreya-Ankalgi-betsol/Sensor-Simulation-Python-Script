@@ -67,6 +67,20 @@ export function Visualization() {
     }
   }, []);
 
+  // Fetch all available threat types (independent of filters)
+  useEffect(() => {
+    const fetchAllThreatTypes = async () => {
+      try {
+        const response = await apiGet<ThreatTypeBreakdownOut>('/api/v1/analytics/threat-type-breakdown');
+        const threatTypes = Array.from(new Set(response.data.map(item => item.threat_type))).sort();
+        setAvailableThreatTypes(threatTypes);
+      } catch (err) {
+        console.error('[Visualization] Error fetching threat types:', err);
+      }
+    };
+    fetchAllThreatTypes();
+  }, []);
+
   // Build query parameters based on current filters and timezone
   const buildQueryParams = () => {
     const params = new URLSearchParams();
@@ -161,10 +175,6 @@ export function Visualization() {
           count: item.count,
         }));
         setThreatTypeDistributionData(threatTypeData);
-
-        // Extract available threat types from returned data
-        const threatTypes = Array.from(new Set(threatTypeBreakdown.data.map(item => item.threat_type)));
-        setAvailableThreatTypes(threatTypes);
 
         // Map severity breakdown data with colors
         const severityColors: { [key: string]: string } = {

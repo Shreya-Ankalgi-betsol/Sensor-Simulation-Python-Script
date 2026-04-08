@@ -135,6 +135,23 @@ export function Threats() {
     };
   };
 
+  // Fetch all available threat types (independent of filters)
+  const fetchAvailableThreatTypes = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      params.append("page_size", "1000"); // Get more threats to extract unique types
+      const url = `/api/v1/threats?${params.toString()}`;
+      const pagedThreats = await apiGet<PagedThreats>(url);
+      
+      const threatTypes = Array.from(
+        new Set(pagedThreats.items.map(t => t.threat_type).filter(Boolean))
+      ).sort();
+      setAvailableThreatTypes(threatTypes);
+    } catch (err) {
+      console.error('[Threats] Error fetching available threat types:', err);
+    }
+  }, []);
+
   // Fetch threat logs for Threat Logs tab
   const fetchThreatLogs = useCallback(async (cursor: string | null = null, isInitial: boolean = false) => {
     try {
@@ -161,10 +178,6 @@ export function Threats() {
       
       if (isInitial) {
         setLogThreats(pagedThreats.items);
-        const threatTypes = Array.from(
-          new Set(pagedThreats.items.map(t => t.threat_type).filter(Boolean))
-        );
-        setAvailableThreatTypes(threatTypes);
       } else {
         setLogThreats(prev => [...prev, ...pagedThreats.items]);
       }
@@ -185,6 +198,11 @@ export function Threats() {
   useEffect(() => {
     setLoading(false);
   }, []);
+
+  // Fetch all available threat types on mount
+  useEffect(() => {
+    fetchAvailableThreatTypes();
+  }, [fetchAvailableThreatTypes]);
 
   // Initial load for Threat Logs
   useEffect(() => {
