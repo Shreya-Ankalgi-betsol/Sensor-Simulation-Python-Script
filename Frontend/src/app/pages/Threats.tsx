@@ -316,11 +316,18 @@ export function Threats() {
     setToDateTime(null)
   };
 
+  // Calculate active sensor count from sensor list
+  const activeSensorCount = sensorList.filter(s => s.status === 'active').length;
+
   // Determine which stats to show based on active tab
-  const displayStats = activeTab === 'live' ? liveStreamStats : {
+  const displayStats = activeTab === 'live' ? {
+    total: liveStreamStats.total,
+    high: liveStreamStats.high,
+    active: activeSensorCount,
+  } : {
     total: threatLogSummary?.total_threats ?? logThreats.filter(t => activeTab === 'logs').length,
     high: threatLogSummary?.high_severity_count ?? logThreats.filter(t => t.severity === "high").length,
-    active: threatLogSummary?.active_sensor_count ?? 6,
+    active: activeSensorCount,
   };
 
   const ThreatTable = ({ 

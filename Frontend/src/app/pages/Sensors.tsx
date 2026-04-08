@@ -37,9 +37,9 @@ export function Sensors() {
   const stats = {
     total: sensorList.length,
     active: sensorList.filter((s) => s.status === "active").length,
-    offline: sensorList.filter((s) => s.status === "inactive").length,
+    inactive: sensorList.filter((s) => s.status === "inactive").length,
     error: sensorList.filter((s) => s.status === "error").length,
-  };
+  }; // Force recompile
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -276,8 +276,8 @@ export function Sensors() {
             color: "#16A34A",
           },
           {
-            label: "Offline",
-            value: stats.offline,
+            label: "Inactive",
+            value: stats.inactive,
             color: "#6B7280",
           },
           {
