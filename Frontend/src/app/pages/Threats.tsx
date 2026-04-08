@@ -1,15 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
-import { ChevronDown, ChevronLeft, ChevronRight, RotateCcw, Calendar, Clock } from "lucide-react";
+import { ChevronDown, RotateCcw } from "lucide-react";
 import { useWebSocket } from '../context/WebSocketContext'
 import { useSensors } from "../context/SensorContext";
 import { apiGet, APIError } from '../services/apiClient';
 import { ThreatLog, ThreatSummaryOut, PagedThreats } from '../types/api';
-import { parseISO } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
 
-// Common IANA timezones for date-fns-tz support
+// Common IANA timezones
 const COMMON_TIMEZONES = [
   'UTC',
   'America/New_York',
@@ -42,37 +40,48 @@ const COMMON_TIMEZONES = [
   'America/Sao_Paulo',
 ];
 
+type ActiveTab = 'live' | 'logs';
+
 export function Threats() {
-  const { sensorList, loading: sensorsLoading } = useSensors();
-  const { liveThreats } = useWebSocket()
-  const [threats, setThreats] = useState<ThreatLog[]>([]);
-  const [threatSummary, setThreatSummary] = useState<ThreatSummaryOut | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { sensorList } = useSensors();
+  const { liveThreats, isConnected, connectionStatus, connect, disconnect, clearLiveThreats } = useWebSocket();
+  
+  // Tab management
+  const [activeTab, setActiveTab] = useState<ActiveTab>('live');
+  
+  // Live Stream Tab State
+  const [liveStreamThreats, setLiveStreamThreats] = useState<ThreatLog[]>([]);
+  const [isStreamStopped, setIsStreamStopped] = useState(false);
+  const [liveStreamStats, setLiveStreamStats] = useState({ total: 0, high: 0, active: 0 });
+  const liveTableContainerRef = useRef<HTMLDivElement>(null);
+
+  // Threat Logs Tab State
+  const [logThreats, setLogThreats] = useState<ThreatLog[]>([]);
+  const [threatLogSummary, setThreatLogSummary] = useState<ThreatSummaryOut | null>(null);
+  const [logLoading, setLogLoading] = useState(true);
+  const [logLoadingMore, setLogLoadingMore] = useState(false);
   
   const [filterTime, setFilterTime] = useState("All");
   const [filterSensorType, setFilterSensorType] = useState("All");
   const [filterSensorId, setFilterSensorId] = useState("All");
   const [filterThreatType, setFilterThreatType] = useState("All");
   const [filterSeverity, setFilterSeverity] = useState("All");
-  
-  // Custom date range state
   const [fromDateTime, setFromDateTime] = useState<Date | null>(null)
   const [toDateTime, setToDateTime] = useState<Date | null>(null)
   const [timezone, setTimezone] = useState<string>('UTC');
   const [availableThreatTypes, setAvailableThreatTypes] = useState<string[]>([]);
   
-  // Pagination state
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
-  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const logTableContainerRef = useRef<HTMLDivElement>(null);
 
-  // Helper function to format UTC timestamp in the selected timezone
-  const formatTimestampInTimezone = (utcTimestamp: string): string => {
+  // Helper function to format UTC timestamp
+  const formatTimestampInTimezone = (utcTimestamp: string, tz: string = timezone): string => {
     try {
       return new Date(utcTimestamp).toLocaleString('en-US', {
-        timeZone: timezone,
+        timeZone: tz,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -82,12 +91,11 @@ export function Threats() {
         hour12: true,
       });
     } catch {
-      return utcTimestamp; // Fallback if timezone is invalid
+      return utcTimestamp;
     }
   };
 
-  // Helper function to calculate from_dt and to_dt based on selected time range
-  // Always returns UTC timestamps in ISO 8601 format (with Z suffix)
+  // Helper function to calculate date range
   const calculateDateRange = (): { from_dt: string | null; to_dt: string | null } => {
     const now = new Date();
     let from: Date | null = null;
@@ -99,8 +107,11 @@ export function Threats() {
       case "Last 30 min":
         from = new Date(now.getTime() - 30 * 60 * 1000);
         break;
-      case "Last 1 hour":
+      case "Last 1 Hour":
         from = new Date(now.getTime() - 60 * 60 * 1000);
+        break;
+      case "Last 2 Hours":
+        from = new Date(now.getTime() - 2 * 60 * 60 * 1000);
         break;
       case "Last 24 hours":
         from = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -123,22 +134,20 @@ export function Threats() {
     };
   };
 
-  // Fetch threats with filters and pagination
-  const fetchThreats = useCallback(async (cursor: string | null = null, isInitial: boolean = false) => {
+  // Fetch threat logs for Threat Logs tab
+  const fetchThreatLogs = useCallback(async (cursor: string | null = null, isInitial: boolean = false) => {
     try {
-      if (isInitial) setLoading(true);
-      else setLoadingMore(true);
+      if (isInitial) setLogLoading(true);
+      else setLogLoadingMore(true);
       setError(null);
 
       const params = new URLSearchParams();
       
-      // Add filter parameters
       if (filterSensorType !== "All") params.append("sensor_type", filterSensorType.toLowerCase());
       if (filterSensorId !== "All") params.append("sensor_id", filterSensorId);
       if (filterSeverity !== "All") params.append("severity", filterSeverity);
       if (filterThreatType !== "All") params.append("threat_type", filterThreatType);
       
-      // Add date range filters based on selected time range
       const { from_dt, to_dt } = calculateDateRange();
       if (from_dt) params.append("from_dt", from_dt);
       if (to_dt) params.append("to_dt", to_dt);
@@ -153,104 +162,121 @@ export function Threats() {
       ]);
       
       if (isInitial) {
-        setThreats(pagedThreats.items);
-        // Extract available threat types from the fetched data
+        setLogThreats(pagedThreats.items);
         const threatTypes = Array.from(
           new Set(pagedThreats.items.map(t => t.threat_type).filter(Boolean))
         );
         setAvailableThreatTypes(threatTypes);
       } else {
-        // For pagination, append new items
-        setThreats(prev => [...prev, ...pagedThreats.items]);
+        setLogThreats(prev => [...prev, ...pagedThreats.items]);
       }
       
       setNextCursor(pagedThreats.next_cursor);
       setHasMore(pagedThreats.has_more);
       if (summary) {
-        setThreatSummary(summary);
+        setThreatLogSummary(summary);
       }
     } catch (err) {
       const message = err instanceof APIError ? err.message : 'Failed to fetch threats';
       setError(message);
       console.error('[Threats] Error fetching:', err);
     } finally {
-      if (isInitial) setLoading(false);
-      else setLoadingMore(false);
+      if (isInitial) setLogLoading(false);
+      else setLogLoadingMore(false);
     }
   }, [filterSensorType, filterSensorId, filterSeverity, filterThreatType, filterTime, fromDateTime, toDateTime]);
 
-  // Initial fetch
+  // Clear initial loading state on mount
   useEffect(() => {
-    fetchThreats(null, true);
+    setLoading(false);
   }, []);
 
-  // Refetch when filters change (reset to first page)
+  // Initial load for Threat Logs
   useEffect(() => {
-    fetchThreats(null, true);
+    fetchThreatLogs(null, true);
+  }, []);
+
+  // Refetch logs when filters change
+  useEffect(() => {
+    fetchThreatLogs(null, true);
   }, [filterTime, filterSensorType, filterSensorId, filterThreatType, filterSeverity, fromDateTime, toDateTime]);
 
-  // Listen for new WebSocket threats and prepend to displayed list
+  // Handle Live Stream data
   useEffect(() => {
+    if (isStreamStopped) return;
+
     if (liveThreats.length === 0) return;
 
-    setThreats((prevThreats) => {
-      // Find threats in liveThreats that aren't in prevThreats (new threats)
+    setLiveStreamThreats((prevThreats) => {
       const newThreats = liveThreats.filter(
         (liveThreat) => !prevThreats.some((t) => t.alert_id === liveThreat.alert_id)
       );
 
-      // If there are new threats, prepend them
       if (newThreats.length > 0) {
-        console.log(`[Threats] Adding ${newThreats.length} new WebSocket threat(s) to display`);
+        console.log(`[Threats] Adding ${newThreats.length} new WebSocket threat(s)`);
+        
+        // Update local stats
+        setLiveStreamStats(prev => ({
+          total: prev.total + newThreats.length,
+          high: prev.high + newThreats.filter(t => t.severity === 'high').length,
+          active: prev.active,
+        }));
+
         return [...newThreats, ...prevThreats];
       }
 
       return prevThreats;
     });
-  }, [liveThreats]);
+  }, [liveThreats, isStreamStopped]);
 
-  // Setup infinite scroll listener
-  useEffect(() => {
-    const container = tableContainerRef.current;
-    if (!container) {
-      console.log('[Scroll] Container ref not found!');
-      return;
+  // Handle tab change
+  const handleTabChange = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    
+    // Reset live stream stats when switching away from live tab
+    if (activeTab === 'live') {
+      setLiveStreamStats({ total: 0, high: 0, active: 0 });
+      setLiveStreamThreats([]);
     }
 
-    console.log('[Scroll] Listener attached. Container scrollHeight:', container.scrollHeight);
+    // Fetch logs when switching to logs tab for the first time
+    if (tab === 'logs' && logThreats.length === 0) {
+      fetchThreatLogs(null, true);
+    }
+  };
+
+  // Handle STOP button
+  const handleStopStream = () => {
+    setIsStreamStopped(true);
+    disconnect();
+  };
+
+  // Handle START button
+  const handleStartStream = () => {
+    setIsStreamStopped(false);
+    setLiveStreamThreats([]);
+    setLiveStreamStats({ total: 0, high: 0, active: 0 });
+    clearLiveThreats();
+    connect();
+  };
+
+  // Infinite scroll for logs tab
+  useEffect(() => {
+    const container = logTableContainerRef.current;
+    if (!container || activeTab !== 'logs') return;
 
     const listener = () => {
       const scrollDiff = container.scrollHeight - container.scrollTop - container.clientHeight;
       const isAtBottom = scrollDiff < 100;
 
-      if (scrollDiff < 200) { // Log when getting close to bottom
-        console.log('[Scroll Event]', {
-          scrollHeight: container.scrollHeight,
-          scrollTop: container.scrollTop,
-          clientHeight: container.clientHeight,
-          scrollDiff,
-          isAtBottom,
-          hasMore,
-          loadingMore,
-          nextCursor: nextCursor ? 'YES' : 'NO'
-        });
-      }
-
-      if (isAtBottom && nextCursor && !loadingMore && hasMore) {
-        console.log('[Scroll] FETCHING MORE');
-        fetchThreats(nextCursor, false);
+      if (isAtBottom && nextCursor && !logLoadingMore && hasMore) {
+        fetchThreatLogs(nextCursor, false);
       }
     };
 
     container.addEventListener('scroll', listener);
     return () => container.removeEventListener('scroll', listener);
-  }, [nextCursor, hasMore, loadingMore, fetchThreats]);
-
-  const stats = {
-    total: threatSummary?.total_threats ?? threats.length,
-    high: threatSummary?.high_severity_count ?? threats.filter((t) => t.severity === "high").length,
-    active: threatSummary?.active_sensor_count ?? 6,
-  };
+  }, [nextCursor, hasMore, logLoadingMore, fetchThreatLogs, activeTab]);
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -288,9 +314,234 @@ export function Threats() {
     setToDateTime(null)
   };
 
-  const handleTimeRangeChange = (value: string) => {
-    setFilterTime(value);
+  // Determine which stats to show based on active tab
+  const displayStats = activeTab === 'live' ? liveStreamStats : {
+    total: threatLogSummary?.total_threats ?? logThreats.filter(t => activeTab === 'logs').length,
+    high: threatLogSummary?.high_severity_count ?? logThreats.filter(t => t.severity === "high").length,
+    active: threatLogSummary?.active_sensor_count ?? 6,
   };
+
+  const ThreatTable = ({ 
+    threats, 
+    loading, 
+    isLiveTab,
+    onScroll 
+  }: { 
+    threats: ThreatLog[], 
+    loading: boolean,
+    isLiveTab: boolean,
+    onScroll?: React.Ref<HTMLDivElement>,
+  }) => (
+    <div
+      className="rounded-lg overflow-hidden"
+      style={{
+        background: "var(--bg-card)",
+        border: "1px solid var(--border-color)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+      }}
+    >
+      <div 
+        ref={onScroll}
+        className="threat-table-container overflow-auto"
+        style={{
+          maxHeight: "calc(100vh - 520px)",
+          overflowY: "auto",
+          scrollbarWidth: "thin",
+          scrollbarColor: "#CBD5E1 #F1F5F9",
+        }}
+      >
+        <style>
+          {`
+            .threat-table-container::-webkit-scrollbar {
+              width: 8px;
+            }
+            .threat-table-container::-webkit-scrollbar-track {
+              background: #F1F5F9;
+            }
+            .threat-table-container::-webkit-scrollbar-thumb {
+              background: #CBD5E1;
+              border-radius: 4px;
+            }
+            .threat-table-container::-webkit-scrollbar-thumb:hover {
+              background: #94A3B8;
+            }
+          `}
+        </style>
+        <table className="w-full">
+          <thead>
+            <tr
+              style={{
+                background: "var(--bg-table-header)",
+                borderBottom: "1px solid var(--border-color)",
+              }}
+            >
+              {[
+                "Threat ID",
+                "Threat",
+                "Sensor ID",
+                "Sensor Type",
+                "Location",
+                "Severity",
+                "Time",
+              ].map((header) => (
+                <th
+                  key={header}
+                  className="px-4 py-3 text-left uppercase tracking-wider"
+                  style={{
+                    fontSize: "0.865rem",
+                    fontWeight: 600,
+                    color: "var(--text-secondary)",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  {header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {threats.length === 0 && !loading ? (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center">
+                  <div style={{
+                    fontSize: "1rem",
+                    color: "var(--text-secondary)",
+                  }}>
+                    {isLiveTab ? "No live threats received yet. Waiting for data..." : "No threats found matching the current filters."}
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              threats.map((threat, index) => (
+                <tr
+                  key={threat.alert_id}
+                  className="border-b transition-all duration-200"
+                  style={{
+                    background:
+                      index % 2 === 0
+                        ? "var(--bg-card)"
+                        : "var(--bg-table-alt)",
+                    borderColor: "var(--border-color)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "var(--bg-hover)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background =
+                      index % 2 === 0
+                        ? "var(--bg-card)"
+                        : "var(--bg-table-alt)";
+                  }}
+                >
+                  <td
+                    className="px-4 py-3"
+                    style={{
+                      fontSize: "1.00625rem",
+                      color: "var(--accent-cyan)",
+                      fontFamily: "var(--font-mono)",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {threat.alert_id}
+                  </td>
+                  <td
+                    className="px-4 py-3"
+                    style={{
+                      fontSize: "1.00625rem",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    {threat.threat_type}
+                  </td>
+                  <td
+                    className="px-4 py-3"
+                    style={{
+                      fontSize: "1.00625rem",
+                      color: "var(--text-primary)",
+                      fontFamily: "var(--font-mono)",
+                    }}
+                  >
+                    {threat.sensor_id}
+                  </td>
+                  <td
+                    className="px-4 py-3"
+                    style={{
+                      fontSize: "1.00625rem",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    {threat.sensor_type}
+                  </td>
+                  <td
+                    className="px-4 py-3"
+                    style={{
+                      fontSize: "1.00625rem",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    {sensorList.find(s => s.sensor_id === threat.sensor_id)?.location || "Unknown"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className="inline-flex items-center gap-2 px-3 py-1 rounded-full"
+                      style={{
+                        background: getSeverityBgColor(threat.severity),
+                        color: getSeverityColor(threat.severity),
+                        fontSize: "0.865rem",
+                        fontWeight: 600,
+                      }}
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{
+                          background: getSeverityColor(threat.severity),
+                        }}
+                      />
+                      {threat.severity}
+                    </span>
+                  </td>
+                  <td
+                    className="px-4 py-3"
+                    style={{
+                      fontSize: "0.865rem",
+                      color: "var(--text-secondary)",
+                      fontFamily: "var(--font-mono)",
+                    }}
+                  >
+                    {formatTimestampInTimezone(threat.timestamp, activeTab === 'live' ? 'UTC' : timezone)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+        
+        {/* Loading More Indicator - Logs tab only */}
+        {!activeTab && logLoadingMore && (
+          <div className="px-4 py-6 text-center border-t" style={{ borderColor: 'var(--border-color)' }}>
+            <div className="flex items-center justify-center gap-2">
+              <div
+                className="inline-block animate-spin rounded-full h-5 w-5 border-b-2"
+                style={{ borderColor: '#0284C7' }}
+              />
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                Loading more threats...
+              </span>
+            </div>
+          </div>
+        )}
+        
+        {/* End of List Indicator */}
+        {!hasMore && logThreats.length > 0 && !activeTab && (
+          <div className="px-4 py-6 text-center border-t" style={{ borderColor: 'var(--border-color)' }}>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+              End of threat log
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -351,746 +602,713 @@ export function Threats() {
           background-color: #E0F2FE !important;
         }
       `}</style>
+
       <div className="p-6 space-y-6">
-      {/* Error Message */}
-      {error && (
-        <div
-          className="p-4 rounded-lg border flex items-center justify-between"
-          style={{
-            background: '#FEE2E2',
-            border: '1px solid #FCA5A5',
-            color: '#991B1B',
-          }}
-        >
-          <span>⚠️ {error}</span>
-          <button
-            onClick={() => window.location.reload()}
-            className="flex items-center gap-2 px-3 py-1 rounded transition-colors"
-            style={{
-              background: '#991B1B',
-              color: '#FFFFFF',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '0.875rem',
-            }}
-          >
-            <RotateCcw size={16} />
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* Loading State */}
-      {loading && !error && (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <div
-              className="inline-block animate-spin rounded-full h-8 w-8 border-b-2"
-              style={{ borderColor: '#0284C7' }}
-            />
-            <p style={{ color: 'var(--text-secondary)', marginTop: '1rem', fontSize: '0.875rem' }}>
-              Loading threats...
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Page Header */}
-      <div>
-        <div
-          className="mb-2"
-          style={{
-            fontSize: "0.865rem",
-            color: "var(--text-secondary)",
-            fontFamily: "var(--font-mono)",
-          }}
-        >
-          Dashboard / Threats
-        </div>
-        <h1
-          className="font-heading"
-          style={{
-            fontSize: "2.3rem",
-            fontWeight: 700,
-            color: "var(--text-primary)",
-          }}
-        >
-          THREATS
-        </h1>
-      </div>
-
-      {!loading && !error && (
-        <>
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          {
-            label: "Total Threats",
-            value: stats.total,
-            color: "#0284C7",
-          },
-          {
-            label: "High Priority",
-            value: stats.high,
-            color: "#DC2626",
-          },
-          {
-            label: "Active",
-            value: stats.active,
-            color: "#D97706",
-          },
-        ].map((stat) => (
+        {/* Error Message */}
+        {error && (
           <div
-            key={stat.label}
-            className="rounded-lg p-4 border-t-2 transition-all duration-200"
+            className="p-4 rounded-lg border flex items-center justify-between"
             style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border-color)",
-              borderTopColor: stat.color,
-              borderTopWidth: "3px",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.boxShadow = `0 4px 20px ${stat.color}20`;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)";
+              background: '#FEE2E2',
+              border: '1px solid #FCA5A5',
+              color: '#991B1B',
             }}
           >
-            <div
-              className="font-heading mb-1"
+            <span>⚠️ {error}</span>
+            <button
+              onClick={() => window.location.reload()}
+              className="flex items-center gap-2 px-3 py-1 rounded transition-colors"
               style={{
-                fontSize: "2.59375rem",
-                fontWeight: 700,
-                color: "var(--text-primary)",
-                lineHeight: 1,
+                background: '#991B1B',
+                color: '#FFFFFF',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '0.875rem',
               }}
             >
-              {stat.value}
-            </div>
-            <div
-              style={{
-                fontSize: "0.71875rem",
-                color: "var(--text-secondary)",
-                fontFamily: "var(--font-mono)",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              }}
-            >
-              {stat.label}
+              <RotateCcw size={16} />
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && !error && (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div
+                className="inline-block animate-spin rounded-full h-8 w-8 border-b-2"
+                style={{ borderColor: '#0284C7' }}
+              />
+              <p style={{ color: 'var(--text-secondary)', marginTop: '1rem', fontSize: '0.875rem' }}>
+                Loading threats...
+              </p>
             </div>
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* Filter Bar */}
-      <div>
-        <div
-          className="rounded-lg p-4"
-          style={{
-            background: "var(--bg-card)",
-            border: "1px solid var(--border-color)",
-          }}
-        >
-          <div className="flex flex-wrap items-end gap-4">
-            {/* Time Range */}
-            <div className="flex-1 min-w-[150px]">
-              <label
-                className="block mb-2"
-                style={{
-                  fontSize: "0.71875rem",
-                  color: "var(--text-secondary)",
-                  fontFamily: "var(--font-mono)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  fontWeight: 600,
-                }}
-              >
-                Time Range
-              </label>
-              <div className="relative">
-                <select
-                  value={filterTime}
-                  onChange={(e) => handleTimeRangeChange(e.target.value)}
-                  className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
-                  style={{
-                    background: "#FFFFFF",
-                    border: "1px solid #E2E8F0",
-                    borderRadius: "6px",
-                    color: "var(--text-primary)",
-                    fontSize: "1.00625rem",
-                  }}
-                >
-                  <option value="All">All</option>
-                  <option value="Last 30 min">Last 30 min</option>
-                  <option value="Last 1 Hour">Last 1 Hour</option>
-                  <option value="Last 2 Hours">Last 2 Hours</option>
-                  <option value="Custom">Custom</option>
-                </select>
-                <ChevronDown
-                  size={16}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: "var(--accent-cyan)" }}
-                />
-              </div>
-            </div>
-
-            {/* Sensor Type */}
-            <div className="flex-1 min-w-[150px]">
-              <label
-                className="block mb-2"
-                style={{
-                  fontSize: "0.71875rem",
-                  color: "var(--text-secondary)",
-                  fontFamily: "var(--font-mono)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  fontWeight: 600,
-                }}
-              >
-                Sensor Type
-              </label>
-              <div className="relative">
-                <select
-                  value={filterSensorType}
-                  onChange={(e) => setFilterSensorType(e.target.value)}
-                  className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
-                  style={{
-                    background: "#FFFFFF",
-                    border: "1px solid #E2E8F0",
-                    borderRadius: "6px",
-                    color: "var(--text-primary)",
-                    fontSize: "1.00625rem",
-                  }}
-                >
-                  <option value="All">All</option>
-                  <option value="radar">Radar</option>
-                  <option value="lidar">Lidar</option>
-                </select>
-                <ChevronDown
-                  size={16}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: "var(--accent-cyan)" }}
-                />
-              </div>
-            </div>
-
-            {/* Sensor ID */}
-            <div className="flex-1 min-w-[150px]">
-              <label
-                className="block mb-2"
-                style={{
-                  fontSize: "0.71875rem",
-                  color: "var(--text-secondary)",
-                  fontFamily: "var(--font-mono)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  fontWeight: 600,
-                }}
-              >
-                Sensor ID
-              </label>
-              <div className="relative">
-                <select
-                  value={filterSensorId}
-                  onChange={(e) => setFilterSensorId(e.target.value)}
-                  className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
-                  style={{
-                    background: "#FFFFFF",
-                    border: "1px solid #E2E8F0",
-                    borderRadius: "6px",
-                    color: "var(--text-primary)",
-                    fontSize: "1.00625rem",
-                  }}
-                >
-                  <option value="All">All</option>
-                  {sensorList.map((sensor) => (
-                    <option key={sensor.sensor_id} value={sensor.sensor_id}>
-                      {sensor.sensor_id}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  size={16}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: "var(--accent-cyan)" }}
-                />
-              </div>
-            </div>
-
-            {/* Threat Type */}
-            <div className="flex-1 min-w-[150px]">
-              <label
-                className="block mb-2"
-                style={{
-                  fontSize: "0.71875rem",
-                  color: "var(--text-secondary)",
-                  fontFamily: "var(--font-mono)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  fontWeight: 600,
-                }}
-              >
-                Threat Type
-              </label>
-              <div className="relative">
-                <select
-                  value={filterThreatType}
-                  onChange={(e) => setFilterThreatType(e.target.value)}
-                  className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
-                  style={{
-                    background: "#FFFFFF",
-                    border: "1px solid #E2E8F0",
-                    borderRadius: "6px",
-                    color: "var(--text-primary)",
-                    fontSize: "1.00625rem",
-                  }}
-                >
-                  <option value="All">All</option>
-                  {availableThreatTypes.map((threatType) => (
-                    <option key={threatType} value={threatType}>
-                      {threatType}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  size={16}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: "var(--accent-cyan)" }}
-                />
-              </div>
-            </div>
-
-            {/* Severity */}
-            <div className="flex-1 min-w-[150px]">
-              <label
-                className="block mb-2"
-                style={{
-                  fontSize: "0.71875rem",
-                  color: "var(--text-secondary)",
-                  fontFamily: "var(--font-mono)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  fontWeight: 600,
-                }}
-              >
-                Severity
-              </label>
-              <div className="relative">
-                <select
-                  value={filterSeverity}
-                  onChange={(e) => setFilterSeverity(e.target.value)}
-                  className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
-                  style={{
-                    background: "#FFFFFF",
-                    border: "1px solid #E2E8F0",
-                    borderRadius: "6px",
-                    color: "var(--text-primary)",
-                    fontSize: "1.00625rem",
-                  }}
-                >
-                  <option value="All">All</option>
-                  <option value="high">High</option>
-                  <option value="med">Medium</option>
-                  <option value="low">Low</option>
-                </select>
-                <ChevronDown
-                  size={16}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: "var(--accent-cyan)" }}
-                />
-              </div>
-            </div>
-
-            {/* Timezone */}
-            <div className="flex-1 min-w-[150px]">
-              <label
-                className="block mb-2"
-                style={{
-                  fontSize: "0.71875rem",
-                  color: "var(--text-secondary)",
-                  fontFamily: "var(--font-mono)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  fontWeight: 600,
-                }}
-              >
-                Timezone
-              </label>
-              <div className="relative">
-                <select
-                  value={timezone}
-                  onChange={(e) => setTimezone(e.target.value)}
-                  className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
-                  style={{
-                    background: "#FFFFFF",
-                    border: "1px solid #E2E8F0",
-                    borderRadius: "6px",
-                    color: "var(--text-primary)",
-                    fontSize: "1.00625rem",
-                  }}
-                >
-                  {COMMON_TIMEZONES.map((tz) => (
-                    <option key={tz} value={tz}>{tz}</option>
-                  ))}
-                </select>
-                <ChevronDown
-                  size={16}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: "var(--accent-cyan)" }}
-                />
-              </div>
-            </div>
-
-            {/* Reset Button */}
+        {!loading && !error && (
+          <>
+            {/* Page Header with Tabs */}
             <div>
-              <button
-                onClick={resetFilters}
-                className="flex items-center gap-2 px-4 py-2 rounded transition-all duration-200"
-                style={{
-                  background: "transparent",
-                  border: "1px solid #E2E8F0",
-                  borderRadius: "8px",
-                  color: "#64748B",
-                  fontSize: "1.00625rem",
-                  fontWeight: 600,
-                  height: "42px",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "#0284C7";
-                  e.currentTarget.style.color = "#0284C7";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "#E2E8F0";
-                  e.currentTarget.style.color = "#64748B";
-                }}
-              >
-                <RotateCcw size={16} />
-                RESET
-              </button>
-            </div>
-          </div>
-
-          {/* Custom Date Picker */}
-          {filterTime === "Custom" && (
-            <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border-color)' }}>
-              <div className="flex flex-wrap items-end gap-4">
-                {/* FROM Date/Time */}
-                <div className="flex-1 min-w-[200px]">
-                  <label
-                    className="block mb-2"
-                    style={{
-                      fontSize: "0.71875rem",
-                      color: "var(--text-secondary)",
-                      fontFamily: "var(--font-mono)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                      fontWeight: 600,
-                    }}
-                  >
-                    FROM
-                  </label>
-                  <DatePicker
-                    selected={fromDateTime}
-                    onChange={(date: Date | null) => {
-                      setFromDateTime(date);
-                      if (toDateTime && date && toDateTime < date) setToDateTime(null);
-                    }}
-                    showTimeSelect
-                    timeFormat="HH:mm"
-                    timeIntervals={1}
-                    dateFormat="dd/MM/yyyy HH:mm"
-                    placeholderText="DD/MM/YYYY HH:MM"
-                    isClearable
-                  />
-                </div>
-
-                {/* TO Date/Time */}
-                <div className="flex-1 min-w-[200px]">
-                  <label
-                    className="block mb-2"
-                    style={{
-                      fontSize: "0.71875rem",
-                      color: "var(--text-secondary)",
-                      fontFamily: "var(--font-mono)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                      fontWeight: 600,
-                    }}
-                  >
-                    TO
-                  </label>
-                  <DatePicker
-                    selected={toDateTime}
-                    onChange={(date: Date | null) => setToDateTime(date)}
-                    showTimeSelect
-                    timeFormat="HH:mm"
-                    timeIntervals={1}
-                    dateFormat="dd/MM/yyyy HH:mm"
-                    placeholderText="DD/MM/YYYY HH:MM"
-                    minDate={fromDateTime || undefined}
-                    isClearable
-                  />
-                </div>
-
-                {/* Apply Button */}
-                <button
-                  onClick={() => {}}
-                  disabled={!fromDateTime || !toDateTime}
-                  className="px-6 py-2.5 rounded transition-all duration-200"
+              <div className="flex items-center justify-between">
+                <h1
+                  className="font-heading"
                   style={{
-                    background: !fromDateTime || !toDateTime ? "#CBD5E1" : "#0284C7",
-                    color: "#FFFFFF",
-                    fontSize: "1.00625rem",
-                    fontWeight: 600,
-                    border: "none",
-                    cursor: !fromDateTime || !toDateTime ? "not-allowed" : "pointer",
-                    opacity: !fromDateTime || !toDateTime ? 0.6 : 1,
-                    padding: "10px 24px",
+                    fontSize: "2.3rem",
+                    fontWeight: 700,
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  THREATS
+                </h1>
+
+                {/* Tabs */}
+                <div className="flex items-center gap-6" style={{ borderBottom: '1px solid #E2E8F0', paddingBottom: '12px' }}>
+                  <button
+                    onClick={() => handleTabChange('live')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '1.00625rem',
+                      fontWeight: activeTab === 'live' ? 600 : 400,
+                      color: activeTab === 'live' ? '#0284C7' : '#64748B',
+                      paddingBottom: '12px',
+                      borderBottom: activeTab === 'live' ? '3px solid #0284C7' : 'none',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (activeTab !== 'live') {
+                        e.currentTarget.style.color = '#0284C7';
+                        e.currentTarget.style.background = '#F0F9FF';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (activeTab !== 'live') {
+                        e.currentTarget.style.color = '#64748B';
+                        e.currentTarget.style.background = 'none';
+                      }
+                    }}
+                  >
+                    LIVE THREAT STREAM
+                  </button>
+
+                  <button
+                    onClick={() => handleTabChange('logs')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '1.00625rem',
+                      fontWeight: activeTab === 'logs' ? 600 : 400,
+                      color: activeTab === 'logs' ? '#0284C7' : '#64748B',
+                      paddingBottom: '12px',
+                      borderBottom: activeTab === 'logs' ? '3px solid #0284C7' : 'none',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (activeTab !== 'logs') {
+                        e.currentTarget.style.color = '#0284C7';
+                        e.currentTarget.style.background = '#F0F9FF';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (activeTab !== 'logs') {
+                        e.currentTarget.style.color = '#64748B';
+                        e.currentTarget.style.background = 'none';
+                      }
+                    }}
+                  >
+                    THREAT LOGS
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-3 gap-4">
+              {[
+                {
+                  label: "Total Threats",
+                  value: displayStats.total,
+                  color: "#0284C7",
+                },
+                {
+                  label: "High Priority",
+                  value: displayStats.high,
+                  color: "#DC2626",
+                },
+                {
+                  label: "Active",
+                  value: displayStats.active,
+                  color: "#D97706",
+                },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="rounded-lg p-4 border-t-2 transition-all duration-200"
+                  style={{
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border-color)",
+                    borderTopColor: stat.color,
+                    borderTopWidth: "3px",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
                   }}
                   onMouseEnter={(e) => {
-                    if (!(!fromDateTime || !toDateTime)) {
-                      e.currentTarget.style.background = "#0369A1";
-                    }
+                    e.currentTarget.style.boxShadow = `0 4px 20px ${stat.color}20`;
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = !fromDateTime || !toDateTime ? "#CBD5E1" : "#0284C7";
+                    e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)";
                   }}
                 >
-                  APPLY
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Threat Log */}
-      <div>
-        <h2
-          className="mb-4 font-heading"
-          style={{
-            fontSize: "1.44375rem",
-            fontWeight: 700,
-            color: "var(--text-primary)",
-          }}
-        >
-          THREAT LOG
-        </h2>
-        <div
-          className="rounded-lg overflow-hidden"
-          style={{
-            background: "var(--bg-card)",
-            border: "1px solid var(--border-color)",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-          }}
-        >
-          <div 
-            ref={tableContainerRef}
-            className="threat-table-container overflow-auto"
-            style={{
-              maxHeight: "calc(100vh - 420px)",
-              overflowY: "auto",
-              scrollbarWidth: "thin",
-              scrollbarColor: "#CBD5E1 #F1F5F9",
-            }}
-          >
-            <style>
-              {`
-                .threat-table-container::-webkit-scrollbar {
-                  width: 8px;
-                }
-                .threat-table-container::-webkit-scrollbar-track {
-                  background: #F1F5F9;
-                }
-                .threat-table-container::-webkit-scrollbar-thumb {
-                  background: #CBD5E1;
-                  border-radius: 4px;
-                }
-                .threat-table-container::-webkit-scrollbar-thumb:hover {
-                  background: #94A3B8;
-                }
-              `}
-            </style>
-            <div className="w-full">
-              <table className="w-full">
-                <thead>
-                  <tr
+                  <div
+                    className="font-heading mb-1"
                     style={{
-                      background: "var(--bg-table-header)",
-                      borderBottom: "1px solid var(--border-color)",
+                      fontSize: "2.59375rem",
+                      fontWeight: 700,
+                      color: "var(--text-primary)",
+                      lineHeight: 1,
                     }}
                   >
-                    {[
-                      "Threat ID",
-                      "Threat",
-                      "Sensor ID",
-                      "Sensor Type",
-                      "Location",
-                      "Severity",
-                      "Time",
-                    ].map((header) => (
-                      <th
-                        key={header}
-                        className="px-4 py-3 text-left uppercase tracking-wider"
-                        style={{
-                          fontSize: "0.865rem",
-                          fontWeight: 600,
-                          color: "var(--text-secondary)",
-                          fontFamily: "var(--font-mono)",
-                        }}
-                      >
-                        {header}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {threats.length === 0 && !loading ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center">
-                        <div style={{
-                          fontSize: "1rem",
-                          color: "var(--text-secondary)",
-                        }}>
-                          No threats found matching the current filters.
-                        </div>
-                      </td>
-                    </tr>
+                    {stat.value}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "0.71875rem",
+                      color: "var(--text-secondary)",
+                      fontFamily: "var(--font-mono)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    {stat.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* LIVE THREAT STREAM TAB */}
+            {activeTab === 'live' && (
+              <>
+                {/* Connection Status Bar */}
+                <div
+                  className="rounded-lg p-4 flex items-center justify-between"
+                  style={{
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border-color)",
+                  }}
+                >
+                  <div className="flex items-center gap-3">
+                    {!isStreamStopped && connectionStatus === 'connecting' && (
+                      <>
+                        <div
+                          className="w-3 h-3 rounded-full animate-pulse"
+                          style={{ background: '#94A3B8' }}
+                        />
+                        <span style={{ color: 'var(--text-primary)', fontSize: '1.00625rem', fontWeight: 500 }}>
+                          CONNECTING...
+                        </span>
+                      </>
+                    )}
+
+                    {!isStreamStopped && connectionStatus === 'connected' && (
+                      <>
+                        <div
+                          className="w-3 h-3 rounded-full animate-pulse"
+                          style={{ background: '#16A34A' }}
+                        />
+                        <span style={{ color: 'var(--text-primary)', fontSize: '1.00625rem', fontWeight: 500 }}>
+                          CONNECTED — Live data streaming
+                        </span>
+                      </>
+                    )}
+
+                    {isStreamStopped && (
+                      <>
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ background: '#DC2626' }}
+                        />
+                        <span style={{ color: 'var(--text-primary)', fontSize: '1.00625rem', fontWeight: 500 }}>
+                          DISCONNECTED
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {!isStreamStopped ? (
+                    <button
+                      onClick={handleStopStream}
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid #DC2626',
+                        color: '#DC2626',
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '1.00625rem',
+                        fontWeight: 600,
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#DC262620';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      ■ STOP
+                    </button>
                   ) : (
-                    threats.map((threat, index) => (
-                      <tr
-                        key={threat.alert_id}
-                        className="border-b transition-all duration-200"
-                        style={{
-                          background:
-                            index % 2 === 0
-                              ? "var(--bg-card)"
-                              : "var(--bg-table-alt)",
-                          borderColor: "var(--border-color)",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "var(--bg-hover)";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background =
-                            index % 2 === 0
-                              ? "var(--bg-card)"
-                              : "var(--bg-table-alt)";
-                        }}
-                      >
-                        <td
-                          className="px-4 py-3"
+                    <button
+                      onClick={handleStartStream}
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid #16A34A',
+                        color: '#16A34A',
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '1.00625rem',
+                        fontWeight: 600,
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#16A34A20';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      ▶ START
+                    </button>
+                  )}
+                </div>
+
+                {/* Stream Stopped Banner */}
+                {isStreamStopped && (
+                  <div
+                    className="rounded-lg p-4"
+                    style={{
+                      background: '#FEF3C7',
+                      border: '1px solid #FCD34D',
+                      color: '#D97706',
+                      fontSize: '1.00625rem',
+                      fontWeight: 500,
+                    }}
+                  >
+                    ⏸ Stream stopped — showing last received data
+                  </div>
+                )}
+
+                {/* Live Threat Table */}
+                <ThreatTable
+                  threats={liveStreamThreats}
+                  loading={false}
+                  isLiveTab={true}
+                  onScroll={liveTableContainerRef}
+                />
+              </>
+            )}
+
+            {/* THREAT LOGS TAB */}
+            {activeTab === 'logs' && (
+              <>
+                {/* Filter Bar */}
+                <div>
+                  <div
+                    className="rounded-lg p-4"
+                    style={{
+                      background: "var(--bg-card)",
+                      border: "1px solid var(--border-color)",
+                    }}
+                  >
+                    <div className="flex flex-wrap items-end gap-4">
+                      {/* Time Range */}
+                      <div className="flex-1 min-w-[150px]">
+                        <label
+                          className="block mb-2"
                           style={{
-                            fontSize: "1.00625rem",
-                            color: "var(--accent-cyan)",
+                            fontSize: "0.71875rem",
+                            color: "var(--text-secondary)",
                             fontFamily: "var(--font-mono)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
                             fontWeight: 600,
                           }}
                         >
-                          {threat.alert_id}
-                        </td>
-                        <td
-                          className="px-4 py-3"
-                          style={{
-                            fontSize: "1.00625rem",
-                            color: "var(--text-primary)",
-                          }}
-                        >
-                          {threat.threat_type}
-                        </td>
-                        <td
-                          className="px-4 py-3"
-                          style={{
-                            fontSize: "1.00625rem",
-                            color: "var(--text-primary)",
-                            fontFamily: "var(--font-mono)",
-                          }}
-                        >
-                          {threat.sensor_id}
-                        </td>
-                        <td
-                          className="px-4 py-3"
-                          style={{
-                            fontSize: "1.00625rem",
-                            color: "var(--text-primary)",
-                          }}
-                        >
-                          {threat.sensor_type}
-                        </td>
-                        <td
-                          className="px-4 py-3"
-                          style={{
-                            fontSize: "1.00625rem",
-                            color: "var(--text-primary)",
-                          }}
-                        >
-                          {sensorList.find(s => s.sensor_id === threat.sensor_id)?.location || "Unknown"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className="inline-flex items-center gap-2 px-3 py-1 rounded-full"
+                          Time Range
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={filterTime}
+                            onChange={(e) => setFilterTime(e.target.value)}
+                            className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
                             style={{
-                              background: getSeverityBgColor(threat.severity),
-                              color: getSeverityColor(threat.severity),
-                              fontSize: "0.865rem",
-                              fontWeight: 600,
+                              background: "#FFFFFF",
+                              border: "1px solid #E2E8F0",
+                              borderRadius: "6px",
+                              color: "var(--text-primary)",
+                              fontSize: "1.00625rem",
                             }}
                           >
-                            <span
-                              className="w-2 h-2 rounded-full"
-                              style={{
-                                background: getSeverityColor(threat.severity),
-                              }}
-                            />
-                            {threat.severity}
-                          </span>
-                        </td>
-                        <td
-                          className="px-4 py-3"
+                            <option value="All">All</option>
+                            <option value="Last 30 min">Last 30 min</option>
+                            <option value="Last 1 Hour">Last 1 Hour</option>
+                            <option value="Last 2 Hours">Last 2 Hours</option>
+                            <option value="Custom">Custom</option>
+                          </select>
+                          <ChevronDown
+                            size={16}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                            style={{ color: "var(--accent-cyan)" }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Sensor Type */}
+                      <div className="flex-1 min-w-[150px]">
+                        <label
+                          className="block mb-2"
                           style={{
-                            fontSize: "0.865rem",
+                            fontSize: "0.71875rem",
                             color: "var(--text-secondary)",
                             fontFamily: "var(--font-mono)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            fontWeight: 600,
                           }}
                         >
-                          {formatTimestampInTimezone(threat.timestamp)}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-              
-              {/* Loading More Indicator */}
-              {loadingMore && (
-                <div className="px-4 py-6 text-center border-t" style={{ borderColor: 'var(--border-color)' }}>
-                  <div className="flex items-center justify-center gap-2">
-                    <div
-                      className="inline-block animate-spin rounded-full h-5 w-5 border-b-2"
-                      style={{ borderColor: '#0284C7' }}
-                    />
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                      Loading more threats...
-                    </span>
+                          Sensor Type
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={filterSensorType}
+                            onChange={(e) => setFilterSensorType(e.target.value)}
+                            className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
+                            style={{
+                              background: "#FFFFFF",
+                              border: "1px solid #E2E8F0",
+                              borderRadius: "6px",
+                              color: "var(--text-primary)",
+                              fontSize: "1.00625rem",
+                            }}
+                          >
+                            <option value="All">All</option>
+                            <option value="radar">Radar</option>
+                            <option value="lidar">Lidar</option>
+                          </select>
+                          <ChevronDown
+                            size={16}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                            style={{ color: "var(--accent-cyan)" }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Sensor ID */}
+                      <div className="flex-1 min-w-[150px]">
+                        <label
+                          className="block mb-2"
+                          style={{
+                            fontSize: "0.71875rem",
+                            color: "var(--text-secondary)",
+                            fontFamily: "var(--font-mono)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Sensor ID
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={filterSensorId}
+                            onChange={(e) => setFilterSensorId(e.target.value)}
+                            className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
+                            style={{
+                              background: "#FFFFFF",
+                              border: "1px solid #E2E8F0",
+                              borderRadius: "6px",
+                              color: "var(--text-primary)",
+                              fontSize: "1.00625rem",
+                            }}
+                          >
+                            <option value="All">All</option>
+                            {sensorList.map((sensor) => (
+                              <option key={sensor.sensor_id} value={sensor.sensor_id}>
+                                {sensor.sensor_id}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown
+                            size={16}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                            style={{ color: "var(--accent-cyan)" }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Threat Type */}
+                      <div className="flex-1 min-w-[150px]">
+                        <label
+                          className="block mb-2"
+                          style={{
+                            fontSize: "0.71875rem",
+                            color: "var(--text-secondary)",
+                            fontFamily: "var(--font-mono)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Threat Type
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={filterThreatType}
+                            onChange={(e) => setFilterThreatType(e.target.value)}
+                            className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
+                            style={{
+                              background: "#FFFFFF",
+                              border: "1px solid #E2E8F0",
+                              borderRadius: "6px",
+                              color: "var(--text-primary)",
+                              fontSize: "1.00625rem",
+                            }}
+                          >
+                            <option value="All">All</option>
+                            {availableThreatTypes.map((threatType) => (
+                              <option key={threatType} value={threatType}>
+                                {threatType}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown
+                            size={16}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                            style={{ color: "var(--accent-cyan)" }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Severity */}
+                      <div className="flex-1 min-w-[150px]">
+                        <label
+                          className="block mb-2"
+                          style={{
+                            fontSize: "0.71875rem",
+                            color: "var(--text-secondary)",
+                            fontFamily: "var(--font-mono)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Severity
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={filterSeverity}
+                            onChange={(e) => setFilterSeverity(e.target.value)}
+                            className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
+                            style={{
+                              background: "#FFFFFF",
+                              border: "1px solid #E2E8F0",
+                              borderRadius: "6px",
+                              color: "var(--text-primary)",
+                              fontSize: "1.00625rem",
+                            }}
+                          >
+                            <option value="All">All</option>
+                            <option value="high">High</option>
+                            <option value="med">Medium</option>
+                            <option value="low">Low</option>
+                          </select>
+                          <ChevronDown
+                            size={16}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                            style={{ color: "var(--accent-cyan)" }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Timezone */}
+                      <div className="flex-1 min-w-[150px]">
+                        <label
+                          className="block mb-2"
+                          style={{
+                            fontSize: "0.71875rem",
+                            color: "var(--text-secondary)",
+                            fontFamily: "var(--font-mono)",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Timezone
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={timezone}
+                            onChange={(e) => setTimezone(e.target.value)}
+                            className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
+                            style={{
+                              background: "#FFFFFF",
+                              border: "1px solid #E2E8F0",
+                              borderRadius: "6px",
+                              color: "var(--text-primary)",
+                              fontSize: "1.00625rem",
+                            }}
+                          >
+                            {COMMON_TIMEZONES.map((tz) => (
+                              <option key={tz} value={tz}>{tz}</option>
+                            ))}
+                          </select>
+                          <ChevronDown
+                            size={16}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                            style={{ color: "var(--accent-cyan)" }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Reset Button */}
+                      <div>
+                        <button
+                          onClick={resetFilters}
+                          className="flex items-center gap-2 px-4 py-2 rounded transition-all duration-200"
+                          style={{
+                            background: "transparent",
+                            border: "1px solid #E2E8F0",
+                            borderRadius: "8px",
+                            color: "#64748B",
+                            fontSize: "1.00625rem",
+                            fontWeight: 600,
+                            height: "42px",
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = "#0284C7";
+                            e.currentTarget.style.color = "#0284C7";
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.borderColor = "#E2E8F0";
+                            e.currentTarget.style.color = "#64748B";
+                          }}
+                        >
+                          <RotateCcw size={16} />
+                          RESET
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Custom Date Picker */}
+                    {filterTime === "Custom" && (
+                      <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border-color)' }}>
+                        <div className="flex flex-wrap items-end gap-4">
+                          {/* FROM Date/Time */}
+                          <div className="flex-1 min-w-[200px]">
+                            <label
+                              className="block mb-2"
+                              style={{
+                                fontSize: "0.71875rem",
+                                color: "var(--text-secondary)",
+                                fontFamily: "var(--font-mono)",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.05em",
+                                fontWeight: 600,
+                              }}
+                            >
+                              FROM
+                            </label>
+                            <DatePicker
+                              selected={fromDateTime}
+                              onChange={(date: Date | null) => {
+                                setFromDateTime(date);
+                                if (toDateTime && date && toDateTime < date) setToDateTime(null);
+                              }}
+                              showTimeSelect
+                              timeFormat="HH:mm"
+                              timeIntervals={1}
+                              dateFormat="dd/MM/yyyy HH:mm"
+                              placeholderText="DD/MM/YYYY HH:MM"
+                              isClearable
+                            />
+                          </div>
+
+                          {/* TO Date/Time */}
+                          <div className="flex-1 min-w-[200px]">
+                            <label
+                              className="block mb-2"
+                              style={{
+                                fontSize: "0.71875rem",
+                                color: "var(--text-secondary)",
+                                fontFamily: "var(--font-mono)",
+                                textTransform: "uppercase",
+                                letterSpacing: "0.05em",
+                                fontWeight: 600,
+                              }}
+                            >
+                              TO
+                            </label>
+                            <DatePicker
+                              selected={toDateTime}
+                              onChange={(date: Date | null) => setToDateTime(date)}
+                              showTimeSelect
+                              timeFormat="HH:mm"
+                              timeIntervals={1}
+                              dateFormat="dd/MM/yyyy HH:mm"
+                              placeholderText="DD/MM/YYYY HH:MM"
+                              minDate={fromDateTime || undefined}
+                              isClearable
+                            />
+                          </div>
+
+                          {/* Apply Button */}
+                          <button
+                            onClick={() => {}}
+                            disabled={!fromDateTime || !toDateTime}
+                            className="px-6 py-2.5 rounded transition-all duration-200"
+                            style={{
+                              background: !fromDateTime || !toDateTime ? "#CBD5E1" : "#0284C7",
+                              color: "#FFFFFF",
+                              fontSize: "1.00625rem",
+                              fontWeight: 600,
+                              border: "none",
+                              cursor: !fromDateTime || !toDateTime ? "not-allowed" : "pointer",
+                              opacity: !fromDateTime || !toDateTime ? 0.6 : 1,
+                              padding: "10px 24px",
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!(!fromDateTime || !toDateTime)) {
+                                e.currentTarget.style.background = "#0369A1";
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = !fromDateTime || !toDateTime ? "#CBD5E1" : "#0284C7";
+                            }}
+                          >
+                            APPLY
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
-              
-              {/* End of List Indicator */}
-              {!hasMore && threats.length > 0 && (
-                <div className="px-4 py-6 text-center border-t" style={{ borderColor: 'var(--border-color)' }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                    End of threat log
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+
+                {/* Threat Log Table */}
+                <ThreatTable
+                  threats={logThreats}
+                  loading={logLoading}
+                  isLiveTab={false}
+                  onScroll={logTableContainerRef}
+                />
+              </>
+            )}
+          </>
+        )}
       </div>
-        </>
-      )}
-    </div>
     </>
   );
 }

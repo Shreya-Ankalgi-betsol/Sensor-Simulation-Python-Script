@@ -72,7 +72,7 @@ export function Sensors() {
     setEditingSensor(sensor);
     setFormData({
       sensor_id: sensor.sensor_id,
-      sensor_type: sensor.sensor_type as 'radar' | 'lidar',
+      sensor_type: sensor.sensor_type as "radar" | "lidar",
       location: sensor.location,
       lat: sensor.lat,
       lng: sensor.lng,
@@ -216,16 +216,6 @@ export function Sensors() {
       {/* Page Header with Add Sensor Button */}
       <div className="flex items-start justify-between">
         <div>
-          <div
-            className="mb-2"
-            style={{
-              fontSize: "0.865rem",
-              color: "var(--text-secondary)",
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            Dashboard / Sensors
-          </div>
           <h1
             className="font-heading"
             style={{

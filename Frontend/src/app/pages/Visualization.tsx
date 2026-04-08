@@ -319,16 +319,6 @@ export function Visualization() {
 
         {/* Page Header */}
         <div>
-          <div
-            className="mb-2"
-            style={{
-              fontSize: '0.865rem',
-              color: 'var(--text-secondary)',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            Dashboard / Visualization
-          </div>
           <h1
             className="font-heading"
             style={{
