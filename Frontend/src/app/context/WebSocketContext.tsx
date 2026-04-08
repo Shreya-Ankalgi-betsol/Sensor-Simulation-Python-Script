@@ -14,60 +14,30 @@ interface WebSocketContextType {
   liveThreats: ThreatLog[]        // All threats including new live ones
   isConnected: boolean
   connectionStatus: 'connecting' | 'connected' | 'disconnected'
-  connect: () => void
-  disconnect: () => void
-  clearLiveThreats: () => void
 }
 
 const WebSocketContext = createContext<WebSocketContextType>({
   liveThreats: [],
   isConnected: false,
   connectionStatus: 'disconnected',
-  connect: () => {},
-  disconnect: () => {},
-  clearLiveThreats: () => {},
 })
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
   const { updateSensor } = useSensors()
   const [liveThreats, setLiveThreats] = useState<ThreatLog[]>([])
   const [isConnected, setIsConnected] = useState(false)
-  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected')
-  const [manualDisconnect, setManualDisconnect] = useState(false)
-
-  const connect = useCallback(() => {
-    console.log('[WebSocket] Manual connect requested')
-    setManualDisconnect(false)
-    setConnectionStatus('connecting')
-    mockWS.connect()
-  }, [])
-
-  const disconnect = useCallback(() => {
-    console.log('[WebSocket] Manual disconnect requested')
-    setManualDisconnect(true)
-    setConnectionStatus('disconnected')
-    setIsConnected(false)
-    mockWS.disconnect()
-  }, [])
-
-  const clearLiveThreats = useCallback(() => {
-    setLiveThreats([])
-  }, [])
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
 
   useEffect(() => {
-    // Only auto-connect if not manually disconnected
-    if (!manualDisconnect) {
-      mockWS.connect()
-      setConnectionStatus('connecting')
-    }
+    // Auto-connect on mount and keep connection always open
+    console.log('[WebSocket] Auto-connecting on app load')
+    mockWS.connect()
+    setConnectionStatus('connecting')
 
     // Listen for incoming messages
     const unsubscribe = mockWS.onMessage((message: WSMessage) => {
       if (message.type === 'NEW_THREAT') {
-        // Only add threats if not manually disconnected
-        if (manualDisconnect) return
-
-        // Only add threats with valid alert_id
+        // Only process threats with valid alert_id
         if (!message.payload.alert_id) {
           console.warn('[WebSocket] Received threat without alert_id, skipping:', message.payload)
           return
@@ -77,7 +47,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         setConnectionStatus('connected')
         setIsConnected(true)
 
-        // Prepend new threat to the top of the list
+        // Prepend new threat to the list (global state - all pages can access)
         setLiveThreats((prev) => {
           // Avoid duplicates
           if (prev.some((t) => t.alert_id === message.payload.alert_id)) {
@@ -88,24 +58,17 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
       }
     })
 
-    // Cleanup on unmount
+    // Cleanup on unmount - do NOT disconnect to keep connection alive
     return () => {
       unsubscribe()
-      if (!manualDisconnect) {
-        mockWS.disconnect()
-        setIsConnected(false)
-      }
     }
-  }, [manualDisconnect])
+  }, [updateSensor])
 
   return (
     <WebSocketContext.Provider value={{ 
       liveThreats, 
       isConnected, 
       connectionStatus,
-      connect,
-      disconnect,
-      clearLiveThreats,
     }}>
       {children}
     </WebSocketContext.Provider>

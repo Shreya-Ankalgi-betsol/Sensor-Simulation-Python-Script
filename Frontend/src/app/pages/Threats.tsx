@@ -44,15 +44,16 @@ type ActiveTab = 'live' | 'logs';
 
 export function Threats() {
   const { sensorList } = useSensors();
-  const { liveThreats, isConnected, connectionStatus, connect, disconnect, clearLiveThreats } = useWebSocket();
+  const { liveThreats, isConnected, connectionStatus } = useWebSocket();
   
   // Tab management
   const [activeTab, setActiveTab] = useState<ActiveTab>('live');
   
-  // Live Stream Tab State
+  // Live Stream Tab State - tracks which threats to display in this tab
   const [liveStreamThreats, setLiveStreamThreats] = useState<ThreatLog[]>([]);
   const [isStreamStopped, setIsStreamStopped] = useState(false);
   const [liveStreamStats, setLiveStreamStats] = useState({ total: 0, high: 0, active: 0 });
+  const [lastThreatTimestamp, setLastThreatTimestamp] = useState<number>(Date.now()); // Track when tab was opened
   const liveTableContainerRef = useRef<HTMLDivElement>(null);
 
   // Threat Logs Tab State
@@ -201,16 +202,23 @@ export function Threats() {
     fetchThreatLogs(null, true);
   }, [filterTime, filterSensorType, filterSensorId, filterThreatType, filterSeverity, fromDateTime, toDateTime]);
 
-  // Handle Live Stream data
+  // Handle Live Stream data - only show threats received after tab was opened
   useEffect(() => {
     if (isStreamStopped) return;
 
     if (liveThreats.length === 0) return;
 
     setLiveStreamThreats((prevThreats) => {
-      const newThreats = liveThreats.filter(
-        (liveThreat) => !prevThreats.some((t) => t.alert_id === liveThreat.alert_id)
-      );
+      // Filter for only threats that arrived AFTER this tab was opened
+      const newThreats = liveThreats.filter((liveThreat) => {
+        // Don't display duplicates
+        if (prevThreats.some((t) => t.alert_id === liveThreat.alert_id)) {
+          return false;
+        }
+        // Only show threats created after tab was opened
+        const threatTime = new Date(liveThreat.timestamp).getTime();
+        return threatTime >= lastThreatTimestamp;
+      });
 
       if (newThreats.length > 0) {
         console.log(`[Threats] Adding ${newThreats.length} new WebSocket threat(s)`);
@@ -227,16 +235,18 @@ export function Threats() {
 
       return prevThreats;
     });
-  }, [liveThreats, isStreamStopped]);
+  }, [liveThreats, isStreamStopped, lastThreatTimestamp]);
 
   // Handle tab change
   const handleTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
     
-    // Reset live stream stats when switching away from live tab
-    if (activeTab === 'live') {
-      setLiveStreamStats({ total: 0, high: 0, active: 0 });
+    // When switching TO live tab, set the timestamp to now to only show new threats
+    if (tab === 'live') {
+      setLastThreatTimestamp(Date.now());
       setLiveStreamThreats([]);
+      setLiveStreamStats({ total: 0, high: 0, active: 0 });
+      setIsStreamStopped(false);
     }
 
     // Fetch logs when switching to logs tab for the first time
@@ -245,19 +255,17 @@ export function Threats() {
     }
   };
 
-  // Handle STOP button
+  // Handle STOP button - just stop displaying threats, WebSocket stays connected
   const handleStopStream = () => {
     setIsStreamStopped(true);
-    disconnect();
   };
 
-  // Handle START button
+  // Handle START button - resume displaying threats
   const handleStartStream = () => {
     setIsStreamStopped(false);
     setLiveStreamThreats([]);
     setLiveStreamStats({ total: 0, high: 0, active: 0 });
-    clearLiveThreats();
-    connect();
+    setLastThreatTimestamp(Date.now());
   };
 
   // Infinite scroll for logs tab
