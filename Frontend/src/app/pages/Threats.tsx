@@ -82,6 +82,7 @@ export function Threats() {
   const scrollPositionRef = useRef<number>(0);
   const prevThreatCountRef = useRef<number>(0);
   const shouldRestoreScrollRef = useRef<boolean>(false);
+  const isUpdatingFromSensorIdRef = useRef<boolean>(false);
   
   // Refs to maintain fresh state values in scroll listener without re-attaching
   const paginationStateRef = useRef({ 
@@ -148,11 +149,17 @@ export function Threats() {
     };
   };
 
-  // Fetch all available threat types (independent of filters)
-  const fetchAvailableThreatTypes = useCallback(async () => {
+  // Fetch all available threat types (independent of filters, or filtered by sensor type)
+  const fetchAvailableThreatTypes = useCallback(async (sensorType: string = "All") => {
     try {
       const params = new URLSearchParams();
       params.append("page_size", "1000"); // Get more threats to extract unique types
+      
+      // If a specific sensor type is selected, filter by it
+      if (sensorType !== "All") {
+        params.append("sensor_type", sensorType.toLowerCase());
+      }
+      
       const url = `/api/v1/threats?${params.toString()}`;
       const pagedThreats = await apiGet<PagedThreats>(url);
       
@@ -223,6 +230,28 @@ export function Threats() {
   useEffect(() => {
     fetchAvailableThreatTypes();
   }, [fetchAvailableThreatTypes]);
+
+  // When sensor type changes, reset sensor ID and threat type, then fetch filtered threat types
+  useEffect(() => {
+    // Only reset sensor ID if this change came from direct user action, not from sensor ID selection
+    if (!isUpdatingFromSensorIdRef.current) {
+      setFilterSensorId("All");
+    }
+    setFilterThreatType("All");
+    fetchAvailableThreatTypes(filterSensorType);
+    isUpdatingFromSensorIdRef.current = false;
+  }, [filterSensorType, fetchAvailableThreatTypes]);
+
+  // When sensor ID changes, update sensor type to match
+  useEffect(() => {
+    if (filterSensorId !== "All") {
+      const selectedSensor = sensorList.find(s => s.sensor_id === filterSensorId);
+      if (selectedSensor && selectedSensor.sensor_type !== filterSensorType) {
+        isUpdatingFromSensorIdRef.current = true;
+        setFilterSensorType(selectedSensor.sensor_type);
+      }
+    }
+  }, [filterSensorId, sensorList, filterSensorType]);
 
   // Initial load for Threat Logs
   useEffect(() => {
@@ -399,6 +428,16 @@ export function Threats() {
     setFromDateTime(null)
     setToDateTime(null)
   };
+
+  // Compute filtered sensor IDs based on selected sensor type
+  const filteredSensorIds = filterSensorType === "All" 
+    ? sensorList.map(s => s.sensor_id)
+    : sensorList.filter(s => s.sensor_type.toLowerCase() === filterSensorType.toLowerCase()).map(s => s.sensor_id);
+
+  // Compute filtered sensors based on selected sensor type
+  const filteredSensors = filterSensorType === "All"
+    ? sensorList
+    : sensorList.filter(s => s.sensor_type.toLowerCase() === filterSensorType.toLowerCase());
 
   // Calculate active sensor count from sensor list
   const activeSensorCount = sensorList.filter(s => s.status === 'active').length;
@@ -1073,7 +1112,7 @@ export function Threats() {
                           onChange={setFilterSensorId}
                           options={[
                             { value: "All", label: "All" },
-                            ...sensorList.map((sensor) => ({
+                            ...filteredSensors.map((sensor) => ({
                               value: sensor.sensor_id,
                               label: sensor.sensor_id,
                             })),

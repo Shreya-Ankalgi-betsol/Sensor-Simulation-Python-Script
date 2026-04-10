@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import {
@@ -22,11 +22,13 @@ import { toZonedTime } from 'date-fns-tz';
 import { NotificationBell } from '../components/NotificationBell';
 import HeadlessUIDropdown from '../components/HeadlessUIDropdown';
 import { useWebSocket } from '../context/WebSocketContext';
+import { useSensors } from '../context/SensorContext';
 import { apiGet, APIError } from '../services/apiClient';
 import { ThreatTimelineOut, ThreatsPerSensorOut, SeverityBreakdownOut, ThreatTypeBreakdownOut, ThreatLog, PagedThreats } from '../types/api';
 
 export function Visualization() {
   const { liveThreats } = useWebSocket();
+  const { sensorList } = useSensors();
   
   // State for fetched analytics data
   const [threatsOverTimeData, setThreatsOverTimeData] = useState<any[]>([]);
@@ -56,6 +58,7 @@ export function Visualization() {
   const [availableTimezones, setAvailableTimezones] = useState<string[]>([]);
   const [availableThreatTypes, setAvailableThreatTypes] = useState<string[]>([]);
   const [availableLocations, setAvailableLocations] = useState<string[]>([]);
+  const isUpdatingFromSensorTypeRef = useRef<boolean>(false);
 
   // Initialize available timezones
   useEffect(() => {
@@ -68,19 +71,35 @@ export function Visualization() {
     }
   }, []);
 
-  // Fetch all available threat types (independent of filters)
-  useEffect(() => {
-    const fetchAllThreatTypes = async () => {
-      try {
-        const response = await apiGet<ThreatTypeBreakdownOut>('/api/v1/analytics/threat-type-breakdown');
-        const threatTypes = Array.from(new Set(response.data.map(item => item.threat_type))).sort();
-        setAvailableThreatTypes(threatTypes);
-      } catch (err) {
-        console.error('[Visualization] Error fetching threat types:', err);
+  // Fetch all available threat types (independent of filters, or filtered by sensor type)
+  const fetchAvailableThreatTypes = useCallback(async (sensorType: string = 'All') => {
+    try {
+      const params = new URLSearchParams();
+      
+      // If a specific sensor type is selected, filter by it
+      if (sensorType !== 'All') {
+        params.append('sensor_type', sensorType);
       }
-    };
-    fetchAllThreatTypes();
+      
+      const suffix = params.toString() ? `?${params.toString()}` : '';
+      const response = await apiGet<ThreatTypeBreakdownOut>(`/api/v1/analytics/threat-type-breakdown${suffix}`);
+      const threatTypes = Array.from(new Set(response.data.map(item => item.threat_type))).sort();
+      setAvailableThreatTypes(threatTypes);
+    } catch (err) {
+      console.error('[Visualization] Error fetching threat types:', err);
+    }
   }, []);
+
+  // Fetch threat types on mount
+  useEffect(() => {
+    fetchAvailableThreatTypes();
+  }, [fetchAvailableThreatTypes]);
+
+  // When sensor type changes, reset threat type and fetch filtered threat types
+  useEffect(() => {
+    setFilterThreatType('All');
+    fetchAvailableThreatTypes(filterSensorType);
+  }, [filterSensorType, fetchAvailableThreatTypes]);
 
   // Build query parameters based on current filters and timezone
   const buildQueryParams = () => {
