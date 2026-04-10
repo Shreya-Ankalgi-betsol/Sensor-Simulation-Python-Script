@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { ChevronDown, RotateCcw } from "lucide-react";
@@ -78,6 +78,17 @@ export function Threats() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const logTableContainerRef = useRef<HTMLDivElement>(null);
+  const scrollPositionRef = useRef<number>(0);
+  const prevThreatCountRef = useRef<number>(0);
+  const shouldRestoreScrollRef = useRef<boolean>(false);
+  
+  // Refs to maintain fresh state values in scroll listener without re-attaching
+  const paginationStateRef = useRef({ 
+    nextCursor: null as string | null, 
+    hasMore: true, 
+    logLoadingMore: false,
+    fetchThreatLogs: null as any,
+  });
 
   // Helper function to format UTC timestamp
   const formatTimestampInTimezone = (utcTimestamp: string, tz: string = timezone): string => {
@@ -301,6 +312,36 @@ export function Threats() {
     setLastThreatTimestamp(Date.now());
   };
 
+  // Initialize prevThreatCountRef when initial data loads
+  useEffect(() => {
+    if (logThreats.length > 0 && prevThreatCountRef.current === 0) {
+      prevThreatCountRef.current = logThreats.length;
+    }
+  }, [logThreats.length]);
+
+  // Restore scroll position after new data is loaded during pagination
+  useEffect(() => {
+    const container = logTableContainerRef.current;
+    if (!container || activeTab !== 'logs' || !shouldRestoreScrollRef.current) return;
+
+    // Restore scroll position after new rows are added
+    if (!logLoadingMore && logThreats.length > prevThreatCountRef.current) {
+      container.scrollTop = scrollPositionRef.current;
+      shouldRestoreScrollRef.current = false;
+      prevThreatCountRef.current = logThreats.length;
+    }
+  }, [logThreats.length, logLoadingMore, activeTab]);
+
+  // Update pagination state ref whenever pagination values change
+  useEffect(() => {
+    paginationStateRef.current = {
+      nextCursor,
+      hasMore,
+      logLoadingMore,
+      fetchThreatLogs,
+    };
+  }, [nextCursor, hasMore, logLoadingMore, fetchThreatLogs]);
+
   // Infinite scroll for logs tab
   useEffect(() => {
     const container = logTableContainerRef.current;
@@ -311,6 +352,9 @@ export function Threats() {
       const isAtBottom = scrollDiff < 100;
 
       if (isAtBottom && nextCursor && !logLoadingMore && hasMore) {
+        // CRITICAL: Save scroll position RIGHT NOW before pagination starts
+        scrollPositionRef.current = container.scrollTop;
+        shouldRestoreScrollRef.current = true;
         fetchThreatLogs(nextCursor, false);
       }
     };
