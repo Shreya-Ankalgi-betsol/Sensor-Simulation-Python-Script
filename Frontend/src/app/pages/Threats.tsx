@@ -1,11 +1,12 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
-import { ChevronDown, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useWebSocket } from '../context/WebSocketContext'
 import { useSensors } from "../context/SensorContext";
 import { apiGet, APIError } from '../services/apiClient';
 import { ThreatLog, ThreatSummaryOut, PagedThreats } from '../types/api';
+import HeadlessUIDropdown from '../components/HeadlessUIDropdown';
 
 // Common IANA timezones
 const COMMON_TIMEZONES = [
@@ -1037,251 +1038,92 @@ export function Threats() {
                     <div className="flex flex-wrap items-end gap-4">
                       {/* Time Range */}
                       <div className="flex-1 min-w-[150px]">
-                        <label
-                          className="block mb-2"
-                          style={{
-                            fontSize: "0.71875rem",
-                            color: "var(--text-secondary)",
-                            fontFamily: "var(--font-mono)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            fontWeight: 600,
-                          }}
-                        >
-                          Time Range
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={filterTime}
-                            onChange={(e) => setFilterTime(e.target.value)}
-                            className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
-                            style={{
-                              background: "#FFFFFF",
-                              border: "1px solid #E2E8F0",
-                              borderRadius: "6px",
-                              color: "var(--text-primary)",
-                              fontSize: "1.00625rem",
-                            }}
-                          >
-                            <option value="All">All</option>
-                            <option value="Last 30 min">Last 30 min</option>
-                            <option value="Last 1 Hour">Last 1 Hour</option>
-                            <option value="Last 2 Hours">Last 2 Hours</option>
-                            <option value="Custom">Custom</option>
-                          </select>
-                          <ChevronDown
-                            size={16}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                            style={{ color: "var(--accent-cyan)" }}
-                          />
-                        </div>
+                        <HeadlessUIDropdown
+                          value={filterTime}
+                          onChange={setFilterTime}
+                          options={[
+                            { value: "All", label: "All" },
+                            { value: "Last 30 min", label: "Last 30 min" },
+                            { value: "Last 1 Hour", label: "Last 1 Hour" },
+                            { value: "Last 2 Hours", label: "Last 2 Hours" },
+                            { value: "Custom", label: "Custom" },
+                          ]}
+                          label="Time Range"
+                        />
                       </div>
 
                       {/* Sensor Type */}
                       <div className="flex-1 min-w-[150px]">
-                        <label
-                          className="block mb-2"
-                          style={{
-                            fontSize: "0.71875rem",
-                            color: "var(--text-secondary)",
-                            fontFamily: "var(--font-mono)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            fontWeight: 600,
-                          }}
-                        >
-                          Sensor Type
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={filterSensorType}
-                            onChange={(e) => setFilterSensorType(e.target.value)}
-                            className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
-                            style={{
-                              background: "#FFFFFF",
-                              border: "1px solid #E2E8F0",
-                              borderRadius: "6px",
-                              color: "var(--text-primary)",
-                              fontSize: "1.00625rem",
-                            }}
-                          >
-                            <option value="All">All</option>
-                            <option value="radar">Radar</option>
-                            <option value="lidar">Lidar</option>
-                          </select>
-                          <ChevronDown
-                            size={16}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                            style={{ color: "var(--accent-cyan)" }}
-                          />
-                        </div>
+                        <HeadlessUIDropdown
+                          value={filterSensorType}
+                          onChange={setFilterSensorType}
+                          options={[
+                            { value: "All", label: "All" },
+                            { value: "radar", label: "Radar" },
+                            { value: "lidar", label: "Lidar" },
+                          ]}
+                          label="Sensor Type"
+                        />
                       </div>
 
                       {/* Sensor ID */}
                       <div className="flex-1 min-w-[150px]">
-                        <label
-                          className="block mb-2"
-                          style={{
-                            fontSize: "0.71875rem",
-                            color: "var(--text-secondary)",
-                            fontFamily: "var(--font-mono)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            fontWeight: 600,
-                          }}
-                        >
-                          Sensor ID
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={filterSensorId}
-                            onChange={(e) => setFilterSensorId(e.target.value)}
-                            className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
-                            style={{
-                              background: "#FFFFFF",
-                              border: "1px solid #E2E8F0",
-                              borderRadius: "6px",
-                              color: "var(--text-primary)",
-                              fontSize: "1.00625rem",
-                            }}
-                          >
-                            <option value="All">All</option>
-                            {sensorList.map((sensor) => (
-                              <option key={sensor.sensor_id} value={sensor.sensor_id}>
-                                {sensor.sensor_id}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown
-                            size={16}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                            style={{ color: "var(--accent-cyan)" }}
-                          />
-                        </div>
+                        <HeadlessUIDropdown
+                          value={filterSensorId}
+                          onChange={setFilterSensorId}
+                          options={[
+                            { value: "All", label: "All" },
+                            ...sensorList.map((sensor) => ({
+                              value: sensor.sensor_id,
+                              label: sensor.sensor_id,
+                            })),
+                          ]}
+                          label="Sensor ID"
+                        />
                       </div>
 
                       {/* Threat Type */}
                       <div className="flex-1 min-w-[150px]">
-                        <label
-                          className="block mb-2"
-                          style={{
-                            fontSize: "0.71875rem",
-                            color: "var(--text-secondary)",
-                            fontFamily: "var(--font-mono)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            fontWeight: 600,
-                          }}
-                        >
-                          Threat Type
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={filterThreatType}
-                            onChange={(e) => setFilterThreatType(e.target.value)}
-                            className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
-                            style={{
-                              background: "#FFFFFF",
-                              border: "1px solid #E2E8F0",
-                              borderRadius: "6px",
-                              color: "var(--text-primary)",
-                              fontSize: "1.00625rem",
-                            }}
-                          >
-                            <option value="All">All</option>
-                            {availableThreatTypes.map((threatType) => (
-                              <option key={threatType} value={threatType}>
-                                {threatType}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown
-                            size={16}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                            style={{ color: "var(--accent-cyan)" }}
-                          />
-                        </div>
+                        <HeadlessUIDropdown
+                          value={filterThreatType}
+                          onChange={setFilterThreatType}
+                          options={[
+                            { value: "All", label: "All" },
+                            ...availableThreatTypes.map((threatType) => ({
+                              value: threatType,
+                              label: threatType,
+                            })),
+                          ]}
+                          label="Threat Type"
+                        />
                       </div>
 
                       {/* Severity */}
                       <div className="flex-1 min-w-[150px]">
-                        <label
-                          className="block mb-2"
-                          style={{
-                            fontSize: "0.71875rem",
-                            color: "var(--text-secondary)",
-                            fontFamily: "var(--font-mono)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            fontWeight: 600,
-                          }}
-                        >
-                          Severity
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={filterSeverity}
-                            onChange={(e) => setFilterSeverity(e.target.value)}
-                            className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
-                            style={{
-                              background: "#FFFFFF",
-                              border: "1px solid #E2E8F0",
-                              borderRadius: "6px",
-                              color: "var(--text-primary)",
-                              fontSize: "1.00625rem",
-                            }}
-                          >
-                            <option value="All">All</option>
-                            <option value="high">High</option>
-                            <option value="med">Medium</option>
-                            <option value="low">Low</option>
-                          </select>
-                          <ChevronDown
-                            size={16}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                            style={{ color: "var(--accent-cyan)" }}
-                          />
-                        </div>
+                        <HeadlessUIDropdown
+                          value={filterSeverity}
+                          onChange={setFilterSeverity}
+                          options={[
+                            { value: "All", label: "All" },
+                            { value: "high", label: "High" },
+                            { value: "med", label: "Medium" },
+                            { value: "low", label: "Low" },
+                          ]}
+                          label="Severity"
+                        />
                       </div>
 
                       {/* Timezone */}
                       <div className="flex-1 min-w-[150px]">
-                        <label
-                          className="block mb-2"
-                          style={{
-                            fontSize: "0.71875rem",
-                            color: "var(--text-secondary)",
-                            fontFamily: "var(--font-mono)",
-                            textTransform: "uppercase",
-                            letterSpacing: "0.05em",
-                            fontWeight: 600,
-                          }}
-                        >
-                          Timezone
-                        </label>
-                        <div className="relative">
-                          <select
-                            value={timezone}
-                            onChange={(e) => setTimezone(e.target.value)}
-                            className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer transition-all duration-200"
-                            style={{
-                              background: "#FFFFFF",
-                              border: "1px solid #E2E8F0",
-                              borderRadius: "6px",
-                              color: "var(--text-primary)",
-                              fontSize: "1.00625rem",
-                            }}
-                          >
-                            {COMMON_TIMEZONES.map((tz) => (
-                              <option key={tz} value={tz}>{tz}</option>
-                            ))}
-                          </select>
-                          <ChevronDown
-                            size={16}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                            style={{ color: "var(--accent-cyan)" }}
-                          />
-                        </div>
+                        <HeadlessUIDropdown
+                          value={timezone}
+                          onChange={setTimezone}
+                          options={COMMON_TIMEZONES.map((tz) => ({
+                            value: tz,
+                            label: tz,
+                          }))}
+                          label="Timezone"
+                        />
                       </div>
 
                       {/* Reset Button */}
