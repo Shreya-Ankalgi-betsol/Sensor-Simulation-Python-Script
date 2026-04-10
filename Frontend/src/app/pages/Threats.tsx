@@ -51,7 +51,8 @@ export function Threats() {
   
   // Live Stream Tab State - tracks which threats to display in this tab
   const [liveStreamThreats, setLiveStreamThreats] = useState<ThreatLog[]>([]);
-  const [isStreamStopped, setIsStreamStopped] = useState(false);
+  const [isStreamPaused, setIsStreamPaused] = useState(false);
+  const [streamPauseTimestamp, setStreamPauseTimestamp] = useState<number | null>(null); // Track when stream was paused
   const [liveStreamStats, setLiveStreamStats] = useState({ total: 0, high: 0, active: 0 });
   const [lastThreatTimestamp, setLastThreatTimestamp] = useState<number>(Date.now()); // Track when tab was opened
   const liveTableContainerRef = useRef<HTMLDivElement>(null);
@@ -216,20 +217,22 @@ export function Threats() {
 
   // Handle Live Stream data - only show threats received after tab was opened
   useEffect(() => {
-    if (isStreamStopped) return;
+    if (isStreamPaused) return;
 
     if (liveThreats.length === 0) return;
 
     setLiveStreamThreats((prevThreats) => {
-      // Filter for only threats that arrived AFTER this tab was opened
+      // Filter for only threats that arrived AFTER this tab was opened (or after pause was resumed)
+      const referenceTime = streamPauseTimestamp ? new Date(streamPauseTimestamp).getTime() : lastThreatTimestamp;
+      
       const newThreats = liveThreats.filter((liveThreat) => {
         // Don't display duplicates
         if (prevThreats.some((t) => t.alert_id === liveThreat.alert_id)) {
           return false;
         }
-        // Only show threats created after tab was opened
+        // Only show threats created after tab was opened or after pause was resumed
         const threatTime = new Date(liveThreat.timestamp).getTime();
-        return threatTime >= lastThreatTimestamp;
+        return threatTime >= referenceTime;
       });
 
       if (newThreats.length > 0) {
@@ -242,23 +245,26 @@ export function Threats() {
           active: prev.active,
         }));
 
-        return [...newThreats, ...prevThreats];
+        // Combine threats and sort by timestamp (most recent first)
+        const combined = [...newThreats, ...prevThreats];
+        return combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       }
 
       return prevThreats;
     });
-  }, [liveThreats, isStreamStopped, lastThreatTimestamp]);
+  }, [liveThreats, isStreamPaused, lastThreatTimestamp, streamPauseTimestamp]);
 
   // Handle tab change
   const handleTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
     
-    // When switching TO live tab, set the timestamp to now to only show new threats
+    // When switching TO live tab, auto-start streaming (not paused)
     if (tab === 'live') {
       setLastThreatTimestamp(Date.now());
       setLiveStreamThreats([]);
       setLiveStreamStats({ total: 0, high: 0, active: 0 });
-      setIsStreamStopped(false);
+      setIsStreamPaused(false);
+      setStreamPauseTimestamp(null);
     }
 
     // Fetch logs when switching to logs tab for the first time
@@ -267,16 +273,24 @@ export function Threats() {
     }
   };
 
-  // Handle STOP button - just stop displaying threats, WebSocket stays connected
-  const handleStopStream = () => {
-    setIsStreamStopped(true);
+  // Handle PAUSE button - pause incoming threats
+  const handlePauseStream = () => {
+    setIsStreamPaused(true);
+    setStreamPauseTimestamp(Date.now());
   };
 
-  // Handle START button - resume displaying threats
-  const handleStartStream = () => {
-    setIsStreamStopped(false);
+  // Handle RESUME button - resume with missed threats and new ones
+  const handleResumeStream = () => {
+    setIsStreamPaused(false);
+    setStreamPauseTimestamp(null);
+    // The effect will automatically add any new threats that arrived during pause
+  };
+
+  // Handle CLEAR button - clear the live stream table
+  const handleClearStream = () => {
     setLiveStreamThreats([]);
     setLiveStreamStats({ total: 0, high: 0, active: 0 });
+    // Reset the timestamp so only threats from this point onward are shown
     setLastThreatTimestamp(Date.now());
   };
 
@@ -359,13 +373,12 @@ export function Threats() {
     isLiveTab: boolean,
     onScroll?: React.Ref<HTMLDivElement>,
   }) => (
-    <div
-      className="rounded-lg overflow-hidden"
-      style={{
-        background: "var(--bg-card)",
-        border: "1px solid var(--border-color)",
-        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-      }}
+      <div
+        className="rounded-2xl overflow-hidden shadow-sm"
+        style={{
+          background: 'rgba(255,255,255,0.94)',
+          border: '1px solid rgba(226,232,240,0.9)',
+        }}
     >
       <div 
         ref={onScroll}
@@ -398,18 +411,17 @@ export function Threats() {
           <thead>
             <tr
               style={{
-                background: "var(--bg-table-header)",
-                borderBottom: "1px solid var(--border-color)",
+                    background: 'rgba(248,250,252,0.95)',
+                    borderBottom: '1px solid rgba(226,232,240,0.9)',
               }}
             >
               {[
-                "Threat ID",
+                "Time",
                 "Threat",
                 "Sensor ID",
                 "Sensor Type",
                 "Location",
                 "Severity",
-                "Time",
               ].map((header) => (
                 <th
                   key={header}
@@ -429,7 +441,7 @@ export function Threats() {
           <tbody>
             {threats.length === 0 && !loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center">
+                <td colSpan={6} className="px-4 py-8 text-center">
                   <div style={{
                     fontSize: "1rem",
                     color: "var(--text-secondary)",
@@ -463,13 +475,12 @@ export function Threats() {
                   <td
                     className="px-4 py-3"
                     style={{
-                      fontSize: "1.00625rem",
-                      color: "var(--accent-cyan)",
+                      fontSize: "0.865rem",
+                      color: "var(--text-secondary)",
                       fontFamily: "var(--font-mono)",
-                      fontWeight: 600,
                     }}
                   >
-                    {threat.alert_id}
+                    {formatTimestampInTimezone(threat.timestamp, activeTab === 'live' ? 'UTC' : timezone)}
                   </td>
                   <td
                     className="px-4 py-3"
@@ -526,16 +537,6 @@ export function Threats() {
                       />
                       {threat.severity}
                     </span>
-                  </td>
-                  <td
-                    className="px-4 py-3"
-                    style={{
-                      fontSize: "0.865rem",
-                      color: "var(--text-secondary)",
-                      fontFamily: "var(--font-mono)",
-                    }}
-                  >
-                    {formatTimestampInTimezone(threat.timestamp, activeTab === 'live' ? 'UTC' : timezone)}
                   </td>
                 </tr>
               ))
@@ -630,7 +631,7 @@ export function Threats() {
         }
       `}</style>
 
-      <div className="p-6 space-y-6">
+      <div className="p-4 space-y-4 xl:p-5">
         {/* Error Message */}
         {error && (
           <div
@@ -678,11 +679,11 @@ export function Threats() {
           <>
             {/* Page Header with Tabs */}
             <div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-start justify-between gap-4">
                 <h1
                   className="font-heading"
                   style={{
-                    fontSize: "2.3rem",
+                    fontSize: "var(--fs-5)",
                     fontWeight: 700,
                     color: "var(--text-primary)",
                   }}
@@ -691,17 +692,17 @@ export function Threats() {
                 </h1>
 
                 {/* Tabs */}
-                <div className="flex items-center gap-6" style={{ borderBottom: '1px solid #E2E8F0', paddingBottom: '12px' }}>
+                <div className="flex items-center gap-4" style={{ borderBottom: '1px solid rgba(226,232,240,0.9)', paddingBottom: '8px' }}>
                   <button
                     onClick={() => handleTabChange('live')}
                     style={{
                       background: 'none',
                       border: 'none',
                       cursor: 'pointer',
-                      fontSize: '1.00625rem',
+                      fontSize: 'var(--fs-2)',
                       fontWeight: activeTab === 'live' ? 600 : 400,
                       color: activeTab === 'live' ? '#0284C7' : '#64748B',
-                      paddingBottom: '12px',
+                      paddingBottom: '8px',
                       borderBottom: activeTab === 'live' ? '3px solid #0284C7' : 'none',
                       transition: 'all 0.2s',
                     }}
@@ -727,10 +728,10 @@ export function Threats() {
                       background: 'none',
                       border: 'none',
                       cursor: 'pointer',
-                      fontSize: '1.00625rem',
+                      fontSize: 'var(--fs-2)',
                       fontWeight: activeTab === 'logs' ? 600 : 400,
                       color: activeTab === 'logs' ? '#0284C7' : '#64748B',
-                      paddingBottom: '12px',
+                      paddingBottom: '8px',
                       borderBottom: activeTab === 'logs' ? '3px solid #0284C7' : 'none',
                       transition: 'all 0.2s',
                     }}
@@ -754,7 +755,7 @@ export function Threats() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-3">
               {[
                 {
                   label: "Total Threats",
@@ -774,13 +775,13 @@ export function Threats() {
               ].map((stat) => (
                 <div
                   key={stat.label}
-                  className="rounded-lg p-4 border-t-2 transition-all duration-200"
+                  className="rounded-2xl p-3.5 border-t-2 transition-all duration-200"
                   style={{
-                    background: "var(--bg-card)",
-                    border: "1px solid var(--border-color)",
+                    background: 'rgba(255,255,255,0.94)',
+                    border: '1px solid rgba(226,232,240,0.9)',
                     borderTopColor: stat.color,
-                    borderTopWidth: "3px",
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+                    borderTopWidth: '3px',
+                    boxShadow: '0 8px 18px rgba(15, 23, 42, 0.05)',
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.boxShadow = `0 4px 20px ${stat.color}20`;
@@ -792,7 +793,7 @@ export function Threats() {
                   <div
                     className="font-heading mb-1"
                     style={{
-                      fontSize: "1.58125rem",
+                      fontSize: "var(--fs-4)",
                       fontWeight: 700,
                       color: "var(--text-primary)",
                       lineHeight: 1,
@@ -802,7 +803,7 @@ export function Threats() {
                   </div>
                   <div
                     style={{
-                      fontSize: "0.71875rem",
+                      fontSize: "var(--fs-1)",
                       color: "var(--text-secondary)",
                       fontFamily: "var(--font-mono)",
                       textTransform: "uppercase",
@@ -820,113 +821,143 @@ export function Threats() {
               <>
                 {/* Connection Status Bar */}
                 <div
-                  className="rounded-lg p-1 flex items-center justify-between"
+                  className="rounded-2xl p-2.5 flex items-center justify-between shadow-sm"
                   style={{
-                    background: "var(--bg-card)",
-                    border: "1px solid var(--border-color)",
+                    background: 'rgba(255,255,255,0.92)',
+                    border: '1px solid rgba(226,232,240,0.9)',
                   }}
                 >
-                  <div className="flex items-center gap-3">
-                    {!isStreamStopped && connectionStatus === 'connecting' && (
+                  <div className="flex items-center gap-2">
+                    {!isStreamPaused && connectionStatus === 'connecting' && (
                       <>
                         <div
                           className="w-3 h-3 rounded-full animate-pulse"
                           style={{ background: '#94A3B8' }}
                         />
-                        <span style={{ color: 'var(--text-primary)', fontSize: '1.00625rem', fontWeight: 500 }}>
+                        <span style={{ color: 'var(--text-primary)', fontSize: 'var(--fs-2)', fontWeight: 600 }}>
                           CONNECTING...
                         </span>
                       </>
                     )}
 
-                    {!isStreamStopped && connectionStatus === 'connected' && (
+                    {!isStreamPaused && connectionStatus === 'connected' && (
                       <>
                         <div
                           className="w-3 h-3 rounded-full animate-pulse"
                           style={{ background: '#16A34A' }}
                         />
-                        <span style={{ color: '#16A34A', fontSize: '1.00625rem', fontWeight: 500 }}>
+                        <span style={{ color: '#16A34A', fontSize: 'var(--fs-2)', fontWeight: 600 }}>
                           CONNECTED — Live data streaming
                         </span>
                       </>
                     )}
 
-                    {isStreamStopped && (
+                    {isStreamPaused && (
                       <>
                         <div
                           className="w-3 h-3 rounded-full"
-                          style={{ background: '#DC2626' }}
+                          style={{ background: '#F59E0B' }}
                         />
-                        <span style={{ color: '#DC2626', fontSize: '1.00625rem', fontWeight: 500 }}>
-                          DISCONNECTED
+                        <span style={{ color: '#F59E0B', fontSize: 'var(--fs-2)', fontWeight: 600 }}>
+                          PAUSED
                         </span>
                       </>
                     )}
                   </div>
 
-                  {!isStreamStopped ? (
+                  <div className="flex items-center gap-2">
+                    {/* CLEAR Button */}
                     <button
-                      onClick={handleStopStream}
+                      onClick={handleClearStream}
                       style={{
                         background: 'transparent',
-                        border: '1px solid #DC2626',
-                        color: '#DC2626',
-                        padding: '8px 16px',
-                        borderRadius: '6px',
+                        border: '1px solid #6B7280',
+                        color: '#6B7280',
+                        padding: '6px 10px',
+                        borderRadius: '9999px',
                         cursor: 'pointer',
-                        fontSize: '1.00625rem',
+                        fontSize: 'var(--fs-1)',
                         fontWeight: 600,
                         transition: 'all 0.2s',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#DC262620';
+                        e.currentTarget.style.background = '#6B728020';
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.background = 'transparent';
                       }}
+                      title="Clear all threats from the table"
                     >
-                      ■ STOP
+                      🗑 CLEAR
                     </button>
-                  ) : (
-                    <button
-                      onClick={handleStartStream}
-                      style={{
-                        background: 'transparent',
-                        border: '1px solid #16A34A',
-                        color: '#16A34A',
-                        padding: '8px 16px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '1.00625rem',
-                        fontWeight: 600,
-                        transition: 'all 0.2s',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#16A34A20';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'transparent';
-                      }}
-                    >
-                      ▶ START
-                    </button>
-                  )}
+
+                    {/* PAUSE/RESUME Buttons */}
+                    {!isStreamPaused ? (
+                      <button
+                        onClick={handlePauseStream}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid #F59E0B',
+                          color: '#F59E0B',
+                          padding: '6px 10px',
+                          borderRadius: '9999px',
+                          cursor: 'pointer',
+                          fontSize: 'var(--fs-1)',
+                          fontWeight: 600,
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#F59E0B20';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                        }}
+                        title="Pause live stream"
+                      >
+                        ⏸ PAUSE
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleResumeStream}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid #16A34A',
+                          color: '#16A34A',
+                          padding: '6px 10px',
+                          borderRadius: '9999px',
+                          cursor: 'pointer',
+                          fontSize: 'var(--fs-1)',
+                          fontWeight: 600,
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#16A34A20';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                        }}
+                        title="Resume live stream with missed threats"
+                      >
+                        ▶ RESUME
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Stream Stopped Banner */}
-                {isStreamStopped && (
+                {/* Stream Paused Banner */}
+                {isStreamPaused && (
                   <div
-                    className="rounded-lg p-1"
+                    className="rounded-2xl p-2.5"
                     style={{
-                      background: '#FEF3C7',
-                      border: '1px solid #FCD34D',
-                      color: '#D97706',
-                      fontSize: '1.00625rem',
+                      background: 'rgba(245, 158, 11, 0.1)',
+                      border: '1px solid rgba(245, 158, 11, 0.3)',
+                      color: '#F59E0B',
+                      fontSize: 'var(--fs-2)',
                       fontWeight: 500,
                       marginTop: '4px',
                     }}
                   >
-                    ⏸ Stream stopped — showing last received data
+                    ⏸ Stream paused — threats received during pause will load on resume
                   </div>
                 )}
 
@@ -946,10 +977,10 @@ export function Threats() {
                 {/* Filter Bar */}
                 <div>
                   <div
-                    className="rounded-lg p-4"
+                    className="rounded-2xl p-4 shadow-sm"
                     style={{
-                      background: "var(--bg-card)",
-                      border: "1px solid var(--border-color)",
+                      background: 'rgba(255,255,255,0.92)',
+                      border: '1px solid rgba(226,232,240,0.9)',
                     }}
                   >
                     <div className="flex flex-wrap items-end gap-4">

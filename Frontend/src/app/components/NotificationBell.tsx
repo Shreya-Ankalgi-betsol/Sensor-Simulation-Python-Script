@@ -15,9 +15,10 @@ interface Notification {
 
 interface NotificationBellProps {
   liveThreats?: ThreatLog[];
+  enableToasts?: boolean;
 }
 
-export function NotificationBell({ liveThreats = [] }: NotificationBellProps) {
+export function NotificationBell({ liveThreats = [], enableToasts = true }: NotificationBellProps) {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showPanel, setShowPanel] = useState(false);
@@ -60,14 +61,16 @@ export function NotificationBell({ liveThreats = [] }: NotificationBellProps) {
         };
 
         setNotifications((prev) => [newNotification, ...prev.slice(0, 9)]);
-        setToasts((prev) => [...prev, newNotification]);
+        if (enableToasts) {
+          setToasts((prev) => [...prev, newNotification]);
 
-        setTimeout(() => {
-          setToasts((prev) => prev.filter((t) => t.id !== threat.alert_id));
-        }, 5000);
+          setTimeout(() => {
+            setToasts((prev) => prev.filter((t) => t.id !== threat.alert_id));
+          }, 5000);
+        }
       }
     });
-  }, [liveThreats]); // Only depend on liveThreats to avoid re-render loops
+  }, [liveThreats, enableToasts]); // Only depend on liveThreats to avoid re-render loops
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -101,19 +104,19 @@ export function NotificationBell({ liveThreats = [] }: NotificationBellProps) {
       >
         <button
           onClick={() => setShowPanel(!showPanel)}
-          className="relative p-2 rounded-lg transition-all duration-200"
+          className="relative p-2 rounded-2xl transition-all duration-200 shadow-sm"
           style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-color)',
+            background: 'rgba(255,255,255,0.95)',
+            border: '1px solid rgba(226,232,240,0.9)',
             color: 'var(--accent-cyan)',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'var(--bg-hover)';
-            e.currentTarget.style.borderColor = 'var(--accent-cyan)';
+            e.currentTarget.style.background = 'rgba(14,165,233,0.08)';
+            e.currentTarget.style.borderColor = 'rgba(14,165,233,0.35)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'var(--bg-card)';
-            e.currentTarget.style.borderColor = 'var(--border-color)';
+            e.currentTarget.style.background = 'rgba(255,255,255,0.95)';
+            e.currentTarget.style.borderColor = 'rgba(226,232,240,0.9)';
           }}
         >
           <Bell size={20} />
@@ -146,28 +149,30 @@ export function NotificationBell({ liveThreats = [] }: NotificationBellProps) {
             
             {/* Panel */}
             <div
-              className="absolute right-0 top-full mt-2 z-[260] rounded-lg shadow-lg overflow-hidden"
+              className="absolute right-0 top-full mt-2 z-[260] rounded-3xl shadow-lg overflow-hidden"
               style={{
-                background: '#FFFFFF',
-                border: '1px solid var(--border-color)',
-                width: '320px',
-                maxHeight: '480px',
+                background: 'rgba(255,255,255,0.96)',
+                border: '1px solid rgba(226,232,240,0.9)',
+                width: '340px',
+                maxHeight: '520px',
                 display: 'flex',
                 flexDirection: 'column',
+                backdropFilter: 'blur(14px)',
               }}
             >
               {/* Header */}
               <div
-                className="px-4 py-3 border-b flex items-center justify-between"
-                style={{ borderColor: 'var(--border-color)' }}
+                className="px-4 py-4 border-b flex items-center justify-between"
+                style={{ borderColor: 'rgba(226,232,240,0.9)' }}
               >
                 <span
                   className="uppercase tracking-wider"
                   style={{
-                    fontSize: '0.865rem',
-                    fontWeight: 600,
-                    color: 'var(--text-primary)',
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    color: 'var(--accent-cyan)',
                     fontFamily: 'var(--font-mono)',
+                    letterSpacing: '0.2em',
                   }}
                 >
                   NOTIFICATIONS
@@ -196,16 +201,16 @@ export function NotificationBell({ liveThreats = [] }: NotificationBellProps) {
                 {notifications.map((notification) => (
                   <div
                     key={notification.id}
-                    className="px-4 py-3 border-b transition-colors cursor-pointer group"
+                    className="px-4 py-4 border-b transition-colors cursor-pointer group"
                     style={{
-                      background: notification.isRead ? '#FFFFFF' : '#EFF6FF',
-                      borderColor: 'var(--border-color)',
+                      background: notification.isRead ? 'rgba(255,255,255,0.92)' : 'rgba(239,246,255,0.95)',
+                      borderColor: 'rgba(226,232,240,0.9)',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = '#F0F9FF';
+                      e.currentTarget.style.background = 'rgba(240,249,255,0.95)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = notification.isRead ? '#FFFFFF' : '#EFF6FF';
+                      e.currentTarget.style.background = notification.isRead ? 'rgba(255,255,255,0.92)' : 'rgba(239,246,255,0.95)';
                     }}
                   >
                     <div className="flex items-start gap-2">
@@ -275,26 +280,28 @@ export function NotificationBell({ liveThreats = [] }: NotificationBellProps) {
 
               {/* Footer */}
               <div
-                className="px-4 py-3 border-t"
-                style={{ borderColor: 'var(--border-color)' }}
+                className="px-4 py-4 border-t"
+                style={{ borderColor: 'rgba(226,232,240,0.9)' }}
               >
                 <button
                   onClick={() => {
                     setShowPanel(false);
                     navigate('/threats');
                   }}
-                  className="w-full py-2 rounded transition-all duration-200"
+                  className="w-full py-2.5 rounded-full transition-all duration-200"
                   style={{
-                    background: 'var(--accent-cyan)',
+                    background: 'linear-gradient(135deg, #0EA5E9, #0284C7)',
                     color: '#FFFFFF',
-                    fontSize: '1.00625rem',
-                    fontWeight: 600,
+                    fontSize: '0.95rem',
+                    fontWeight: 700,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = '#0369A1';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = '0 14px 28px rgba(14,165,233,0.22)';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'var(--accent-cyan)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
                   }}
                 >
                   View All
@@ -310,29 +317,33 @@ export function NotificationBell({ liveThreats = [] }: NotificationBellProps) {
         <div
           style={{
             position: 'fixed',
-            top: '80px',
+            bottom: '20px',
             right: '20px',
             zIndex: 99999,
             display: 'flex',
             flexDirection: 'column',
             gap: '8px',
+            pointerEvents: 'none',
           }}
         >
           {toasts.map((toast) => (
             <div
               key={toast.id}
               style={{
-                background: '#FFFFFF',
-                width: '320px',
+                background: 'rgba(255,255,255,0.97)',
+                width: '340px',
                 borderLeft: `4px solid ${getSeverityColor(toast.severity)}`,
-                borderRadius: '8px',
-                boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-                padding: '12px',
+                borderRadius: '18px',
+                boxShadow: '0 18px 34px rgba(15, 23, 42, 0.12)',
+                padding: '14px',
                 animation: 'slideInToast 0.3s ease-out',
                 display: 'flex',
                 alignItems: 'flex-start',
                 gap: '12px',
                 position: 'relative',
+                border: '1px solid rgba(226,232,240,0.9)',
+                backdropFilter: 'blur(12px)',
+                pointerEvents: 'auto',
               }}
             >
               {/* Content */}
@@ -394,11 +405,11 @@ export function NotificationBell({ liveThreats = [] }: NotificationBellProps) {
       <style>{`
         @keyframes slideInToast {
           from {
-            transform: translateX(120%);
+            transform: translateY(12px);
             opacity: 0;
           }
           to {
-            transform: translateX(0);
+            transform: translateY(0);
             opacity: 1;
           }
         }

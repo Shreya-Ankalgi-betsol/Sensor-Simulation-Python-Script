@@ -323,22 +323,24 @@ export function Visualization() {
           background-color: #E0F2FE !important;
         }
       `}</style>
-      <div className="p-6 space-y-6">
+      <div className="p-4 space-y-4 xl:p-5">
         {/* Notification Bell */}
         <NotificationBell liveThreats={liveThreats} />
 
         {/* Page Header */}
-        <div>
-          <h1
-            className="font-heading"
-            style={{
-              fontSize: '2.3rem',
-              fontWeight: 700,
-              color: 'var(--text-primary)',
-            }}
-          >
-            VISUALIZATION
-          </h1>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1
+              className="font-heading"
+              style={{
+                fontSize: 'var(--fs-5)',
+                fontWeight: 700,
+                color: 'var(--text-primary)',
+              }}
+            >
+              VISUALIZATION
+            </h1>
+          </div>
         </div>
 
         {/* Error Message */}
@@ -388,10 +390,10 @@ export function Visualization() {
           <>
         <div>
           <div
-            className="rounded-lg p-4"
+            className="rounded-3xl p-4 shadow-sm"
             style={{
-              background: '#FFFFFF',
-              border: '1px solid #E2E8F0',
+              background: 'rgba(255,255,255,0.92)',
+              border: '1px solid rgba(226,232,240,0.9)',
             }}
           >
             <div className="flex flex-wrap items-end gap-4">
@@ -985,38 +987,38 @@ export function Visualization() {
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div
-      className="rounded-lg p-4 border transition-all duration-200 relative"
+      className="rounded-3xl p-5 border transition-all duration-200 relative shadow-sm"
       style={{
-        background: 'var(--bg-card)',
-        borderColor: 'var(--border-color)',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+        background: 'rgba(255,255,255,0.94)',
+        borderColor: 'rgba(226,232,240,0.9)',
+        boxShadow: '0 10px 24px rgba(15, 23, 42, 0.06)',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.boxShadow = '0 4px 12px rgba(2, 132, 199, 0.15)';
+        e.currentTarget.style.boxShadow = '0 16px 32px rgba(14, 165, 233, 0.12)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+        e.currentTarget.style.boxShadow = '0 10px 24px rgba(15, 23, 42, 0.06)';
       }}
     >
       <div className="flex items-center justify-between mb-4">
         <h3
           className="uppercase tracking-wider"
           style={{
-            fontSize: '0.865rem',
+            fontSize: '0.75rem',
             fontWeight: 600,
             color: 'var(--accent-cyan)',
-            letterSpacing: '0.1em',
+            letterSpacing: '0.2em',
             fontFamily: 'var(--font-mono)',
           }}
         >
           {title}
         </h3>
         <button
-          className="p-1 rounded transition-all duration-200"
+          className="p-2 rounded-full transition-all duration-200"
           style={{ color: 'var(--text-secondary)' }}
           onMouseEnter={(e) => {
             e.currentTarget.style.color = 'var(--accent-cyan)';
-            e.currentTarget.style.background = 'rgba(2, 132, 199, 0.1)';
+            e.currentTarget.style.background = 'rgba(14, 165, 233, 0.1)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.color = 'var(--text-secondary)';

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, User, Flame, Sword } from 'lucide-react';
+import { AlertTriangle, User, Flame, Sword, Activity } from 'lucide-react';
 import { useWebSocket } from '../context/WebSocketContext';
 import { ThreatLog } from '../types/api';
 
@@ -8,7 +8,7 @@ interface LiveAlert extends ThreatLog {
 }
 
 export function LiveAlerts() {
-  const { liveThreats } = useWebSocket();
+  const { liveThreats, connectionStatus } = useWebSocket();
   const [displayAlerts, setDisplayAlerts] = useState<LiveAlert[]>([]);
 
   // Update display alerts when live threats change
@@ -68,48 +68,51 @@ export function LiveAlerts() {
     }
   };
 
+  const connectionMeta = {
+    connecting: { label: 'Connecting', tone: '#D97706' },
+    connected: { label: 'Live', tone: '#16A34A' },
+    disconnected: { label: 'Offline', tone: '#DC2626' },
+  }[connectionStatus];
+
   return (
     <div
-      className="h-full rounded-lg flex flex-col overflow-hidden"
+      className="h-full rounded-2xl flex flex-col overflow-hidden border shadow-sm"
       style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border-color)',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+        background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96))',
+        borderColor: 'rgba(226,232,240,0.9)',
+        boxShadow: '0 8px 20px rgba(15, 23, 42, 0.06)',
       }}
     >
       {/* Header */}
-      <div
-        className="px-4 py-3 border-b flex-shrink-0"
-        style={{ borderColor: 'var(--border-color)' }}
-      >
-        <div className="flex items-center justify-between">
-          <h3
-            className="uppercase tracking-wider"
-            style={{
-              fontSize: '0.865rem',
-              fontWeight: 600,
-              color: 'var(--accent-cyan)',
-              letterSpacing: '0.1em',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            Live Alerts
-          </h3>
-          <span
-            style={{
-              fontSize: '0.75rem',
-              color: 'var(--text-secondary)',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            (Last 10)
-          </span>
+      <div className="px-4 py-3 border-b flex-shrink-0" style={{ borderColor: 'rgba(226,232,240,0.9)' }}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div
+              className="uppercase tracking-[0.2em]"
+              style={{
+                fontSize: 'var(--fs-1)',
+                fontWeight: 700,
+                color: 'var(--accent-cyan)',
+                fontFamily: 'var(--font-mono)',
+              }}
+            >
+              Threat feed
+            </div>
+            <h3 className="mt-1 font-semibold text-slate-900" style={{ fontSize: 'var(--fs-4)' }}>
+              Live alerts
+            </h3>
+          </div>
+
+          <div className="rounded-full px-2.5 py-1 font-semibold" style={{ background: `${connectionMeta.tone}15`, color: connectionMeta.tone, fontSize: 'var(--fs-1)' }}>
+            {connectionMeta.label}
+          </div>
         </div>
+
       </div>
 
       {/* Alert List - Scrollable Container */}
       <div 
-        className="flex-1 overflow-y-auto p-4 space-y-3"
+        className="flex-1 overflow-y-auto p-3 space-y-2"
         style={{
           scrollBehavior: 'smooth',
           scrollbarWidth: 'thin',
@@ -134,13 +137,18 @@ export function LiveAlerts() {
         `}</style>
         {displayAlerts.length === 0 ? (
           <div
+            className="rounded-xl border border-dashed p-5 text-center"
             style={{
-              textAlign: 'center',
               color: 'var(--text-secondary)',
-              paddingTop: '20px',
+              borderColor: 'rgba(226,232,240,0.9)',
+              background: 'rgba(248,250,252,0.8)',
             }}
           >
-            Waiting for alerts...
+            <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-xl" style={{ background: 'rgba(14,165,233,0.12)', color: 'var(--accent-cyan)' }}>
+              <Activity size={18} />
+            </div>
+            <div className="font-semibold text-slate-900" style={{ fontSize: 'var(--fs-3)' }}>Waiting for live detections</div>
+            <div className="mt-1" style={{ fontSize: 'var(--fs-2)' }}>New incidents will appear here as soon as sensors report them.</div>
           </div>
         ) : (
           displayAlerts.map((alert, index) => {
@@ -150,17 +158,19 @@ export function LiveAlerts() {
             return (
               <div
                 key={alert.alert_id || `threat-${index}`}  // Fallback to index if alert_id is missing
-                className={`rounded-lg transition-all duration-500`}
+                className="rounded-xl border transition-all duration-500"
                 style={{
-                  background: alert.isNew ? '#DBEAFE' : 'var(--bg-primary)',
+                  background: alert.isNew ? 'rgba(219,234,254,0.75)' : 'rgba(255,255,255,0.95)',
+                  borderColor: 'rgba(226,232,240,0.9)',
                   borderLeft: `4px solid ${severityColor}`,
-                  padding: '12px',
+                  padding: '10px',
+                  boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)',
                 }}
               >
                 <div className="flex items-start gap-3">
                   {/* Icon */}
                   <div
-                    className="mt-1 flex-shrink-0 p-2 rounded"
+                    className="mt-1 flex-shrink-0 rounded-lg p-1.5"
                     style={{
                       color: severityColor,
                       background: `${severityColor}15`,
@@ -175,7 +185,7 @@ export function LiveAlerts() {
                       <h4
                         className="font-heading uppercase"
                         style={{
-                          fontSize: '1.00625rem',
+                          fontSize: 'var(--fs-2)',
                           fontWeight: 700,
                           color: severityColor,
                           lineHeight: 1.2,
@@ -189,7 +199,7 @@ export function LiveAlerts() {
                           style={{
                             background: severityBgColor,
                             color: severityColor,
-                            fontSize: '0.71875rem',
+                            fontSize: 'var(--fs-1)',
                             fontWeight: 600,
                           }}
                         >
@@ -199,18 +209,21 @@ export function LiveAlerts() {
                     </div>
 
                     <div
-                      className="flex items-center gap-2"
+                      className="flex items-center gap-2 overflow-hidden whitespace-nowrap"
                       style={{
-                        fontSize: '0.865rem',
-                        color: 'var(--text-secondary)',
+                        fontSize: 'var(--fs-2)',
+                        fontWeight: 600,
+                        color: 'var(--text-primary)',
                         fontFamily: 'var(--font-mono)',
                       }}
                     >
-                      <span style={{ color: 'var(--accent-cyan)' }}>
+                      <span className="shrink-0" style={{ color: 'var(--accent-cyan)' }}>
                         {alert.sensor_id}
                       </span>
-                      <span>·</span>
-                      <span>{new Date(alert.timestamp).toLocaleString()}</span>
+                      <span className="shrink-0" style={{ color: 'var(--text-secondary)' }}>&middot;</span>
+                      <span className="truncate" style={{ color: 'var(--text-primary)', fontSize: 'var(--fs-1)' }}>
+                        {new Date(alert.timestamp).toLocaleString()}
+                      </span>
                     </div>
                   </div>
                 </div>

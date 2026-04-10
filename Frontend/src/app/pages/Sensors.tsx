@@ -168,7 +168,7 @@ export function Sensors() {
   return (
     <div className="p-6 space-y-6">
       {/* Notification Bell */}
-      <NotificationBell liveThreats={threats} />
+      <NotificationBell liveThreats={threats} enableToasts={false} />
 
       {/* Error Message */}
       {error && (
@@ -213,19 +213,22 @@ export function Sensors() {
         </div>
       )}
 
-      {/* Page Header with Add Sensor Button */}
-      <div className="flex items-center justify-between">
+      {/* Compact Page Header */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1
             className="font-heading"
             style={{
-              fontSize: "2.3rem",
+              fontSize: "var(--fs-5)",
               fontWeight: 700,
               color: "var(--text-primary)",
             }}
           >
             SENSORS
           </h1>
+          <p className="mt-1 max-w-2xl" style={{ color: 'var(--text-secondary)', fontSize: 'var(--fs-2)' }}>
+            Manage sensor inventory, status, and coverage from one central place.
+          </p>
         </div>
 
         {/* Add Sensor Button */}
@@ -233,12 +236,12 @@ export function Sensors() {
           <button
             onClick={openAddModal}
             disabled={loading}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg transition-all duration-200 disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-200 disabled:opacity-50 shadow-sm"
             style={{
-              background: '#0284C7',
+              background: 'linear-gradient(135deg, #0EA5E9, #0284C7)',
               color: '#FFFFFF',
-              fontSize: '0.875rem',
-              fontWeight: 600,
+              fontSize: 'var(--fs-2)',
+              fontWeight: 700,
               textTransform: 'uppercase',
               border: 'none',
               letterSpacing: '0.025em',
@@ -246,13 +249,13 @@ export function Sensors() {
             }}
             onMouseEnter={(e) => {
               if (!loading) {
-                e.currentTarget.style.background = '#0369A1';
-                e.currentTarget.style.transform = 'scale(1.02)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = '0 14px 28px rgba(14, 165, 233, 0.24)';
               }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = '#0284C7';
-              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = '0 6px 14px rgba(14, 165, 233, 0.16)';
+              e.currentTarget.style.transform = 'translateY(0)';
             }}
           >
             <Plus size={16} />
@@ -263,7 +266,7 @@ export function Sensors() {
 
       {!loading && !error && (
         <>
-      <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-4 gap-3">
         {[
           {
             label: "Total Sensors",
@@ -288,13 +291,13 @@ export function Sensors() {
         ].map((stat) => (
           <div
             key={stat.label}
-            className="rounded-lg p-4 border-t-2 transition-all duration-200"
+            className="rounded-2xl p-3 border-t-2 transition-all duration-200"
             style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border-color)",
+              background: 'rgba(255,255,255,0.94)',
+              border: '1px solid rgba(226,232,240,0.9)',
               borderTopColor: stat.color,
-              borderTopWidth: "3px",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+              borderTopWidth: '3px',
+              boxShadow: '0 8px 18px rgba(15, 23, 42, 0.05)',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.boxShadow = `0 4px 20px ${stat.color}20`;
@@ -306,7 +309,7 @@ export function Sensors() {
             <div
               className="font-heading mb-1"
               style={{
-                fontSize: "1.58125rem",
+                fontSize: "var(--fs-4)",
                 fontWeight: 700,
                 color: "var(--text-primary)",
                 lineHeight: 1,
@@ -316,7 +319,7 @@ export function Sensors() {
             </div>
             <div
               style={{
-                fontSize: "0.71875rem",
+                fontSize: "var(--fs-1)",
                 color: "var(--text-secondary)",
                 fontFamily: "var(--font-mono)",
                 textTransform: "uppercase",
@@ -333,20 +336,23 @@ export function Sensors() {
       <div>
         <div
           style={{
-            background: "var(--bg-card)",
-            border: "1px solid var(--border-color)",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-            borderRadius: '8px',
-            overflow: 'visible',
+            background: 'rgba(255,255,255,0.94)',
+            border: '1px solid rgba(226,232,240,0.9)',
+            boxShadow: '0 10px 24px rgba(15, 23, 42, 0.06)',
+            borderRadius: '24px',
+            overflow: 'hidden',
           }}
         >
-          <div style={{ overflowX: 'auto', overflowY: 'visible' }}>
+          <div style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: 'calc(100vh - 290px)' }}>
             <table className="w-full">
               <thead>
                 <tr
                   style={{
-                    background: "var(--bg-table-header)",
-                    borderBottom: "1px solid var(--border-color)",
+                    background: 'rgba(248,250,252,0.95)',
+                    borderBottom: '1px solid rgba(226,232,240,0.9)',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 2,
                   }}
                 >
                   {[
@@ -361,7 +367,7 @@ export function Sensors() {
                       key={header}
                       className="px-4 py-3 text-left uppercase tracking-wider"
                       style={{
-                        fontSize: "0.865rem",
+                        fontSize: "var(--fs-2)",
                         fontWeight: 600,
                         color: "var(--text-secondary)",
                         fontFamily: "var(--font-mono)",
@@ -397,7 +403,7 @@ export function Sensors() {
                     <td
                       className="px-4 py-3"
                       style={{
-                        fontSize: "1.00625rem",
+                        fontSize: "var(--fs-3)",
                         color: "var(--accent-cyan)",
                         fontFamily: "var(--font-mono)",
                         fontWeight: 600,
@@ -408,7 +414,7 @@ export function Sensors() {
                     <td
                       className="px-4 py-3"
                       style={{
-                        fontSize: "1.00625rem",
+                        fontSize: "var(--fs-3)",
                         color: "var(--text-primary)",
                       }}
                     >
@@ -420,7 +426,7 @@ export function Sensors() {
                         style={{
                           background: `${getStatusColor(sensor.status)}20`,
                           color: getStatusColor(sensor.status),
-                          fontSize: "0.865rem",
+                          fontSize: "var(--fs-2)",
                           fontWeight: 600,
                         }}
                       >
@@ -436,7 +442,7 @@ export function Sensors() {
                     <td
                       className="px-4 py-3"
                       style={{
-                        fontSize: "1.00625rem",
+                        fontSize: "var(--fs-3)",
                         color: "var(--text-primary)",
                       }}
                     >
@@ -445,7 +451,7 @@ export function Sensors() {
                     <td
                       className="px-4 py-3"
                       style={{
-                        fontSize: "0.865rem",
+                        fontSize: "var(--fs-2)",
                         color: "var(--text-secondary)",
                         fontFamily: "var(--font-mono)",
                       }}

@@ -2,22 +2,22 @@
 
 :root {
   /* Light theme color system */
-  --bg-primary: #F0F4F8;
-  --bg-sidebar: #FFFFFF;
+  --bg-primary: #EEF3F8;
+  --bg-sidebar: #0F172A;
   --bg-card: #FFFFFF;
-  --bg-hover: #EFF6FF;
+  --bg-hover: #E0F2FE;
   --bg-map: #F8FAFC;
   --bg-table-alt: #F8FAFC;
   --bg-table-header: #F1F5F9;
   
-  --accent-cyan: #0284C7;
+  --accent-cyan: #0EA5E9;
   --danger-red: #DC2626;
   --warning-amber: #D97706;
   --safe-green: #16A34A;
   --offline-gray: #6B7280;
   
   --text-primary: #0F172A;
-  --text-secondary: #64748B;
+  --text-secondary: #475569;
   --border-color: #E2E8F0;
   
   /* Severity badge backgrounds */
@@ -29,6 +29,11 @@
   --font-heading: 'Rajdhani', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
   --font-ui: 'Syne', sans-serif;
+  --fs-1: 0.75rem;
+  --fs-2: 0.875rem;
+  --fs-3: 1rem;
+  --fs-4: 1.25rem;
+  --fs-5: 1.75rem;
   
   /* Spacing */
   --spacing-unit: 8px;
@@ -141,6 +146,23 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-mono);
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at top left, rgba(14, 165, 233, 0.14), transparent 34%),
+      radial-gradient(circle at 80% 10%, rgba(15, 23, 42, 0.06), transparent 24%),
+      linear-gradient(180deg, #F8FBFF 0%, #EEF3F8 100%);
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image: linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 80%);
+    opacity: 0.4;
   }
 
   html {
@@ -152,45 +174,49 @@
   }
 
   h1 {
-    font-size: 2.3rem;
+    font-size: var(--fs-5);
     font-weight: 700;
     line-height: 1.2;
   }
 
   h2 {
-    font-size: 1.725rem;
+    font-size: var(--fs-4);
     font-weight: 700;
     line-height: 1.3;
   }
 
   h3 {
-    font-size: 1.4375rem;
+    font-size: var(--fs-4);
     font-weight: 600;
     line-height: 1.4;
   }
 
   h4 {
-    font-size: 1.15rem;
+    font-size: var(--fs-3);
     font-weight: 600;
     line-height: 1.5;
   }
 
+  p, span, li, td, th {
+    font-size: var(--fs-3);
+  }
+
   label {
-    font-size: 1.00625rem;
+    font-size: var(--fs-3);
     font-weight: var(--font-weight-medium);
     line-height: 1.5;
   }
 
   button {
     font-family: var(--font-ui);
-    font-size: 1.00625rem;
+    font-size: var(--fs-3);
     font-weight: var(--font-weight-medium);
     line-height: 1.5;
   }
 
   input {
     font-family: var(--font-mono);
-    font-size: 1.00625rem;
+    font-size: var(--fs-3);
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
