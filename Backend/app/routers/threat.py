@@ -13,17 +13,6 @@ router = APIRouter(
 
 
 @router.get(
-    "/summary",
-    response_model=ThreatSummaryOut,
-    summary="Threat summary",
-    description="Returns total threats, high severity count and active sensor count.",
-)
-async def get_threat_summary(
-    db: AsyncSession = Depends(get_db),
-) -> ThreatSummaryOut:
-    return await threat_service.get_threat_summary(db)
-
-@router.get(
     "",
     response_model=PagedThreats,
     summary="Get all threats",

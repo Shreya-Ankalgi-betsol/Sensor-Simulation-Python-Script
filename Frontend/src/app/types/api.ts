@@ -29,7 +29,7 @@ export interface ThreatLog {
   sensor_type: string
   threat_type: string // e.g. "drone", "person", "vehicle"
   confidence: number // 0-1
-  severity: string // 'low' | 'med' | 'high' | 'critical'
+  severity: string // 'low' | 'med' | 'high'
   timestamp: string // ISO datetime
 }
 
@@ -40,6 +40,8 @@ export interface ThreatLog {
 export interface PagedThreats {
   items: ThreatLog[]
   total: number
+  high_severity_count: number
+  active_sensor_count: number
   next_cursor: string | null
   has_more: boolean
 }
@@ -107,7 +109,7 @@ export interface ThreatsPerSensorOut {
  * Matches backend SeverityBreakdownPoint schema
  */
 export interface SeverityBreakdownPoint {
-  severity: string // 'low' | 'med' | 'high' | 'critical'
+  severity: string // 'low' | 'med' | 'high'
   count: number
 }
 

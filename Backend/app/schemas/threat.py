@@ -23,8 +23,10 @@ class ThreatOut(BaseModel):
 # Paginated response 
 class PagedThreats(BaseModel):
     items: list[ThreatOut]
-    total: int # total number of threats matching the filter. 
-    next_cursor: Optional[str]
+    total: int
+    high_severity_count: int
+    active_sensor_count: int
+    next_cursor: str | None = None
     has_more: bool
 
 

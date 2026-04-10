@@ -183,6 +183,13 @@ export function Threats() {
         setLogThreats(prev => [...prev, ...pagedThreats.items]);
       }
       
+      // Extract summary stats from backend response
+      setThreatLogSummary({
+        total_threats: pagedThreats.total,
+        high_severity_count: pagedThreats.high_severity_count,
+        active_sensor_count: pagedThreats.active_sensor_count,
+      });
+      
       setNextCursor(pagedThreats.next_cursor);
       setHasMore(pagedThreats.has_more);
     } catch (err) {
@@ -357,9 +364,9 @@ export function Threats() {
     high: liveStreamStats.high,
     active: activeSensorCount,
   } : {
-    total: threatLogSummary?.total_threats ?? logThreats.filter(t => activeTab === 'logs').length,
-    high: threatLogSummary?.high_severity_count ?? logThreats.filter(t => t.severity === "high").length,
-    active: activeSensorCount,
+    total: threatLogSummary?.total_threats ?? 0,
+    high: threatLogSummary?.high_severity_count ?? 0,
+    active: threatLogSummary?.active_sensor_count ?? 0,
   };
 
   const ThreatTable = ({ 

@@ -43,17 +43,31 @@ class IngestionService:
             else:
                 db.add(self._to_lidar_reading(payload, reading_status))
 
-            saved_threats = await self._save_threats(
+            threat_logs = await self._save_threats(
                 payload=payload,
                 detected_objects=detected_objects,
                 db=db,
             )
+            saved_threats = len(threat_logs)
+
+            # Broadcast threats to WebSocket clients and update summary
+            for threat_log in threat_logs:
+                alert_data = {
+                    "alert_id": threat_log.alert_id,
+                    "sensor_id": threat_log.sensor_id,
+                    "sensor_type": threat_log.sensor_type,
+                    "threat_type": threat_log.threat_type,
+                    "severity": threat_log.severity.value,
+                    "timestamp": threat_log.timestamp.isoformat(),
+                }
+                await threat_service.push_alert(alert_data, db)
 
             sensor.last_ping = payload.timestamp
             sensor.status = SensorStatus.active
 
             await self._mark_stale_sensors_inactive(db)
             await db.flush()
+            await db.commit()
 
             # Log database saves
             log_data_saved(
@@ -160,37 +174,24 @@ class IngestionService:
         payload: SensorIngestPayload,
         detected_objects: list[dict[str, Any]],
         db: AsyncSession,
-    ) -> int:
-        saved = 0
+    ) -> list[ThreatLog]:
+        threats = []
 
         for detected_object in detected_objects:
             severity = self._map_severity(detected_object.get("severity"))
             threat = ThreatLog(
                 sensor_id=payload.sensor_id,
                 sensor_type=payload.type,
-                threat_type=str(detected_object.get("type", "unknown")),
+                threat_type=str(detected_object.get("threat_type", detected_object.get("type", "unknown"))),
                 confidence=float(detected_object.get("confidence", 0.0)),
                 severity=severity,
                 timestamp=payload.timestamp,
             )
             db.add(threat)
             await db.flush()  # Flush to generate alert_id from database
-            saved += 1
+            threats.append(threat)
 
-            await threat_service.push_alert(
-                {
-                    "alert_id": threat.alert_id,
-                    "sensor_id": payload.sensor_id,
-                    "sensor_type": payload.type,
-                    "threat_type": threat.threat_type,
-                    "confidence": threat.confidence,
-                    "severity": threat.severity.value,
-                    "timestamp": payload.timestamp.isoformat(),
-                },
-                db=db,
-            )
-
-        return saved
+        return threats
 
     async def _mark_stale_sensors_inactive(self, db: AsyncSession) -> None:
         stale_cutoff = datetime.now(UTC) - self.inactive_after
