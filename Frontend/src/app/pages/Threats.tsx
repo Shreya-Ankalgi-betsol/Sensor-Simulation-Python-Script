@@ -8,6 +8,7 @@ import { useSensors } from "../context/SensorContext";
 import { apiGet, APIError } from '../services/apiClient';
 import { ThreatLog, ThreatSummaryOut, PagedThreats } from '../types/api';
 import HeadlessUIDropdown from '../components/HeadlessUIDropdown';
+import CheckboxGroup from '../components/CheckboxGroup';
 
 // Common IANA timezones
 const COMMON_TIMEZONES = [
@@ -67,10 +68,10 @@ export function Threats() {
   const [logLoadingMore, setLogLoadingMore] = useState(false);
   
   const [filterTime, setFilterTime] = useState("All");
-  const [filterSensorType, setFilterSensorType] = useState("All");
-  const [filterSensorId, setFilterSensorId] = useState("All");
-  const [filterThreatType, setFilterThreatType] = useState("All");
-  const [filterSeverity, setFilterSeverity] = useState("All");
+  const [filterSensorTypes, setFilterSensorTypes] = useState<string[]>([]);
+  const [filterSensorIds, setFilterSensorIds] = useState<string[]>([]);
+  const [filterThreatTypes, setFilterThreatTypes] = useState<string[]>([]);
+  const [filterSeverities, setFilterSeverities] = useState<string[]>([]);
   const [fromDateTime, setFromDateTime] = useState<Date | null>(null)
   const [toDateTime, setToDateTime] = useState<Date | null>(null)
   const [timezone, setTimezone] = useState<string>('UTC');
@@ -84,7 +85,6 @@ export function Threats() {
   const scrollPositionRef = useRef<number>(0);
   const prevThreatCountRef = useRef<number>(0);
   const shouldRestoreScrollRef = useRef<boolean>(false);
-  const isUpdatingFromSensorIdRef = useRef<boolean>(false);
   
   // Refs to maintain fresh state values in scroll listener without re-attaching
   const paginationStateRef = useRef({ 
@@ -152,15 +152,15 @@ export function Threats() {
   };
 
   // Fetch all available threat types (independent of filters, or filtered by sensor type)
-  const fetchAvailableThreatTypes = useCallback(async (sensorType: string = "All") => {
+  const fetchAvailableThreatTypes = useCallback(async (sensorTypes: string[] = []) => {
     try {
       const params = new URLSearchParams();
       params.append("page_size", "1000"); // Get more threats to extract unique types
       
-      // If a specific sensor type is selected, filter by it
-      if (sensorType !== "All") {
-        params.append("sensor_type", sensorType.toLowerCase());
-      }
+      // If specific sensor types are selected, filter by them
+      sensorTypes.forEach(type => {
+        params.append("sensor_type", type.toLowerCase());
+      });
       
       const url = `/api/v1/threats?${params.toString()}`;
       const pagedThreats = await apiGet<PagedThreats>(url);
@@ -183,10 +183,11 @@ export function Threats() {
 
       const params = new URLSearchParams();
       
-      if (filterSensorType !== "All") params.append("sensor_type", filterSensorType.toLowerCase());
-      if (filterSensorId !== "All") params.append("sensor_id", filterSensorId);
-      if (filterSeverity !== "All") params.append("severity", filterSeverity);
-      if (filterThreatType !== "All") params.append("threat_type", filterThreatType);
+      // Build repeated query params for multi-select
+      filterSensorTypes.forEach(t => params.append("sensor_type", t.toLowerCase()));
+      filterSensorIds.forEach(id => params.append("sensor_id", id));
+      filterSeverities.forEach(s => params.append("severity", s));
+      filterThreatTypes.forEach(t => params.append("threat_type", t));
       
       const { from_dt, to_dt } = calculateDateRange();
       if (from_dt) params.append("from_dt", from_dt);
@@ -221,7 +222,7 @@ export function Threats() {
       if (isInitial) setLogLoading(false);
       else setLogLoadingMore(false);
     }
-  }, [filterSensorType, filterSensorId, filterSeverity, filterThreatType, filterTime, fromDateTime, toDateTime]);
+  }, [filterSensorTypes, filterSensorIds, filterSeverities, filterThreatTypes, filterTime, fromDateTime, toDateTime]);
 
   // Clear initial loading state on mount
   useEffect(() => {
@@ -233,37 +234,23 @@ export function Threats() {
     fetchAvailableThreatTypes();
   }, [fetchAvailableThreatTypes]);
 
-  // When sensor type changes, reset sensor ID and threat type, then fetch filtered threat types
+  // When sensor types change, reset sensor IDs and threat types, then fetch filtered threat types
   useEffect(() => {
-    // Only reset sensor ID if this change came from direct user action, not from sensor ID selection
-    if (!isUpdatingFromSensorIdRef.current) {
-      setFilterSensorId("All");
-    }
-    setFilterThreatType("All");
-    fetchAvailableThreatTypes(filterSensorType);
-    isUpdatingFromSensorIdRef.current = false;
-  }, [filterSensorType, fetchAvailableThreatTypes]);
-
-  // When sensor ID changes, update sensor type to match
-  useEffect(() => {
-    if (filterSensorId !== "All") {
-      const selectedSensor = sensorList.find(s => s.sensor_id === filterSensorId);
-      if (selectedSensor && selectedSensor.sensor_type !== filterSensorType) {
-        isUpdatingFromSensorIdRef.current = true;
-        setFilterSensorType(selectedSensor.sensor_type);
-      }
-    }
-  }, [filterSensorId, sensorList, filterSensorType]);
+    setFilterSensorIds([]);
+    setFilterThreatTypes([]);
+    fetchAvailableThreatTypes(filterSensorTypes);
+  }, [filterSensorTypes, fetchAvailableThreatTypes]);
 
   // Initial load for Threat Logs
   useEffect(() => {
     fetchThreatLogs(null, true);
   }, []);
 
-  // Refetch logs when filters change
+  // Refetch logs when filters change - reset cursor to load from beginning
   useEffect(() => {
+    setNextCursor(null);
     fetchThreatLogs(null, true);
-  }, [filterTime, filterSensorType, filterSensorId, filterThreatType, filterSeverity, fromDateTime, toDateTime]);
+  }, [filterTime, filterSensorTypes, filterSensorIds, filterThreatTypes, filterSeverities, fromDateTime, toDateTime]);
 
   // Handle Live Stream data - only show threats received after tab was opened
   useEffect(() => {
@@ -424,23 +411,23 @@ export function Threats() {
 
   const resetFilters = () => {
     setFilterTime("All");
-    setFilterSensorType("All");
-    setFilterSensorId("All");
-    setFilterThreatType("All");
-    setFilterSeverity("All");
+    setFilterSensorTypes([]);
+    setFilterSensorIds([]);
+    setFilterThreatTypes([]);
+    setFilterSeverities([]);
     setFromDateTime(null)
     setToDateTime(null)
   };
 
-  // Compute filtered sensor IDs based on selected sensor type
-  const filteredSensorIds = filterSensorType === "All" 
+  // Compute available sensor IDs based on selected sensor types
+  const filteredSensorIds = filterSensorTypes.length === 0
     ? sensorList.map(s => s.sensor_id)
-    : sensorList.filter(s => s.sensor_type.toLowerCase() === filterSensorType.toLowerCase()).map(s => s.sensor_id);
+    : sensorList.filter(s => filterSensorTypes.includes(s.sensor_type.toLowerCase())).map(s => s.sensor_id);
 
-  // Compute filtered sensors based on selected sensor type
-  const filteredSensors = filterSensorType === "All"
+  // Compute available sensors based on selected sensor types
+  const filteredSensors = filterSensorTypes.length === 0
     ? sensorList
-    : sensorList.filter(s => s.sensor_type.toLowerCase() === filterSensorType.toLowerCase());
+    : sensorList.filter(s => filterSensorTypes.includes(s.sensor_type.toLowerCase()));
 
   // Calculate active sensor count from sensor list
   const activeSensorCount = sensorList.filter(s => s.status === 'active').length;
@@ -1096,62 +1083,54 @@ export function Threats() {
 
                       {/* Sensor Type */}
                       <div className="flex-1 min-w-[150px]">
-                        <HeadlessUIDropdown
-                          value={filterSensorType}
-                          onChange={setFilterSensorType}
+                        <CheckboxGroup
+                          label="Sensor Type"
                           options={[
-                            { value: "All", label: "All" },
                             { value: "radar", label: "Radar" },
                             { value: "lidar", label: "Lidar" },
                           ]}
-                          label="Sensor Type"
+                          selected={filterSensorTypes}
+                          onChange={setFilterSensorTypes}
                         />
                       </div>
 
                       {/* Sensor ID */}
                       <div className="flex-1 min-w-[150px]">
-                        <HeadlessUIDropdown
-                          value={filterSensorId}
-                          onChange={setFilterSensorId}
-                          options={[
-                            { value: "All", label: "All" },
-                            ...filteredSensors.map((sensor) => ({
-                              value: sensor.sensor_id,
-                              label: sensor.sensor_id,
-                            })),
-                          ]}
+                        <CheckboxGroup
                           label="Sensor ID"
+                          options={filteredSensors.map((sensor) => ({
+                            value: sensor.sensor_id,
+                            label: sensor.sensor_id,
+                          }))}
+                          selected={filterSensorIds}
+                          onChange={setFilterSensorIds}
                         />
                       </div>
 
                       {/* Threat Type */}
                       <div className="flex-1 min-w-[150px]">
-                        <HeadlessUIDropdown
-                          value={filterThreatType}
-                          onChange={setFilterThreatType}
-                          options={[
-                            { value: "All", label: "All" },
-                            ...availableThreatTypes.map((threatType) => ({
-                              value: threatType,
-                              label: threatType,
-                            })),
-                          ]}
+                        <CheckboxGroup
                           label="Threat Type"
+                          options={availableThreatTypes.map((threatType) => ({
+                            value: threatType,
+                            label: threatType,
+                          }))}
+                          selected={filterThreatTypes}
+                          onChange={setFilterThreatTypes}
                         />
                       </div>
 
                       {/* Severity */}
                       <div className="flex-1 min-w-[150px]">
-                        <HeadlessUIDropdown
-                          value={filterSeverity}
-                          onChange={setFilterSeverity}
+                        <CheckboxGroup
+                          label="Severity"
                           options={[
-                            { value: "All", label: "All" },
                             { value: "high", label: "High" },
                             { value: "med", label: "Medium" },
                             { value: "low", label: "Low" },
                           ]}
-                          label="Severity"
+                          selected={filterSeverities}
+                          onChange={setFilterSeverities}
                         />
                       </div>
 

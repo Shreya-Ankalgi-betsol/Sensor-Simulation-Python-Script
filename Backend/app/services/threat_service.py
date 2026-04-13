@@ -10,7 +10,7 @@ from app.models.sensor import Sensor, SensorStatus
 from app.models.threat_log import ThreatLog, ThreatSeverity
 from app.services.ws_session_manager import session_manager
 
-from app.schemas.threat import  PagedThreats, ThreatFilter, ThreatOut, ThreatSummaryOut
+from app.schemas.threat import PagedThreats, ThreatFilter, ThreatOut
 
 
 class ThreatService:
@@ -35,15 +35,15 @@ class ThreatService:
     ) -> PagedThreats:
         query = select(ThreatLog)
 
-        # Apply filters
-        if filters.sensor_type is not None:
-            query = query.where(ThreatLog.sensor_type == filters.sensor_type)
-        if filters.sensor_id is not None:
-            query = query.where(ThreatLog.sensor_id == filters.sensor_id)
-        if filters.threat_type is not None:
-            query = query.where(ThreatLog.threat_type == filters.threat_type)
-        if filters.severity is not None:
-            query = query.where(ThreatLog.severity == filters.severity)
+        # Apply filters - use .in_() for multi-select support
+        if filters.sensor_type is not None and len(filters.sensor_type) > 0:
+            query = query.where(ThreatLog.sensor_type.in_(filters.sensor_type))
+        if filters.sensor_id is not None and len(filters.sensor_id) > 0:
+            query = query.where(ThreatLog.sensor_id.in_(filters.sensor_id))
+        if filters.threat_type is not None and len(filters.threat_type) > 0:
+            query = query.where(ThreatLog.threat_type.in_(filters.threat_type))
+        if filters.severity is not None and len(filters.severity) > 0:
+            query = query.where(ThreatLog.severity.in_(filters.severity))
         if filters.from_dt is not None:
             query = query.where(ThreatLog.timestamp >= filters.from_dt)
         if filters.to_dt is not None:
@@ -57,20 +57,20 @@ class ThreatService:
         # Get high severity count with the same filters
         # Build a separate query with all the same filters PLUS severity = high
         high_severity_query = select(ThreatLog)
-        if filters.sensor_type is not None:
-            high_severity_query = high_severity_query.where(ThreatLog.sensor_type == filters.sensor_type)
-        if filters.sensor_id is not None:
-            high_severity_query = high_severity_query.where(ThreatLog.sensor_id == filters.sensor_id)
-        if filters.threat_type is not None:
-            high_severity_query = high_severity_query.where(ThreatLog.threat_type == filters.threat_type)
+        if filters.sensor_type is not None and len(filters.sensor_type) > 0:
+            high_severity_query = high_severity_query.where(ThreatLog.sensor_type.in_(filters.sensor_type))
+        if filters.sensor_id is not None and len(filters.sensor_id) > 0:
+            high_severity_query = high_severity_query.where(ThreatLog.sensor_id.in_(filters.sensor_id))
+        if filters.threat_type is not None and len(filters.threat_type) > 0:
+            high_severity_query = high_severity_query.where(ThreatLog.threat_type.in_(filters.threat_type))
         # Always filter for high severity in this count (regardless of user's severity filter)
         high_severity_query = high_severity_query.where(ThreatLog.severity == ThreatSeverity.high)
         if filters.from_dt is not None:
             high_severity_query = high_severity_query.where(ThreatLog.timestamp >= filters.from_dt)
         if filters.to_dt is not None:
             high_severity_query = high_severity_query.where(ThreatLog.timestamp <= filters.to_dt)
-        # If user filtered by severity, AND it's not "high", then high severity count is 0
-        if filters.severity is not None and filters.severity != ThreatSeverity.high:
+        # If user filtered by severity AND it's not "high", then high severity count is 0
+        if filters.severity is not None and len(filters.severity) > 0 and ThreatSeverity.high not in [ThreatSeverity(s) for s in filters.severity]:
             high_severity_count = 0
         else:
             high_severity_count_query = select(func.count()).select_from(high_severity_query.subquery())
@@ -129,63 +129,6 @@ class ThreatService:
     async def push_alert(self, alert_data: dict, db: AsyncSession | None = None) -> None:
         # Broadcast threat to all connected WebSocket clients in frontend format
         await session_manager.broadcast_threat(alert_data)
-        
-        # Broadcast updated summary stats
-        if db:
-            await self.broadcast_summary_update(db)
-    
-    async def get_threat_summary(
-        self, filters: ThreatFilter, db: AsyncSession
-    ) -> ThreatSummaryOut:
-        
-        # Base query for threats
-        query = select(ThreatLog)
-        if filters.sensor_type:
-            query = query.where(ThreatLog.sensor_type == filters.sensor_type)
-        if filters.sensor_id:
-            query = query.where(ThreatLog.sensor_id == filters.sensor_id)
-        if filters.threat_type:
-            query = query.where(ThreatLog.threat_type == filters.threat_type)
-        if filters.severity:
-            query = query.where(ThreatLog.severity == filters.severity)
-        if filters.from_dt:
-            query = query.where(ThreatLog.timestamp >= filters.from_dt)
-        if filters.to_dt:
-            query = query.where(ThreatLog.timestamp <= filters.to_dt)
-
-        # Total threats (with filters)
-        total_result = await db.execute(
-            select(func.count(ThreatLog.alert_id)).select_from(query.subquery())
-        )
-        total_threats = total_result.scalar_one()
-
-        # High severity count (with filters)
-        high_severity_query = query.where(ThreatLog.severity == ThreatSeverity.high)
-        high_result = await db.execute(
-            select(func.count(ThreatLog.alert_id)).select_from(high_severity_query.subquery())
-        )
-        high_severity_count = high_result.scalar_one()
-
-        # Active sensor count (remains unfiltered)
-        active_result = await db.execute(
-            select(func.count(Sensor.sensor_id)).where(
-                Sensor.status == SensorStatus.active
-            )
-        )
-        active_sensor_count = active_result.scalar_one()
-
-        return ThreatSummaryOut(
-            total_threats=total_threats,
-            high_severity_count=high_severity_count,
-            active_sensor_count=active_sensor_count,
-        )
-    
-    async def broadcast_summary_update(self, db: AsyncSession) -> None:
-        """Calculate current threat summary and broadcast to all connected clients."""
-        # Use empty filter to get global summary
-        empty_filter = ThreatFilter()
-        summary = await self.get_threat_summary(empty_filter, db)
-        await session_manager.broadcast_summary_update(summary.model_dump())
 
 
 threat_service = ThreatService()
