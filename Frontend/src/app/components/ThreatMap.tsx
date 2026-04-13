@@ -3,11 +3,13 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSensors } from '../context/SensorContext';
 import { useWebSocket } from '../context/WebSocketContext';
+import { useMapNavigation } from '../context/MapNavigationContext';
 import { ThreatLog } from '../types/api';
 
 export function ThreatMap() {
   const { sensorList } = useSensors();
   const { liveThreats } = useWebSocket();
+  const { zoomTarget, setZoomTarget } = useMapNavigation();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const sensorLayerRef = useRef<L.LayerGroup | null>(null);
@@ -301,6 +303,7 @@ export function ThreatMap() {
     });
   }, [sensorList, defaultCenter]);
 
+  // Render threat points on the map
   useEffect(() => {
     const threatLayer = threatLayerRef.current;
     if (!threatLayer) {
@@ -362,6 +365,26 @@ export function ThreatMap() {
       }).addTo(threatLayer);
     });
   }, [liveThreats, sensorList]);
+
+  // Handle zoom to specific sensor
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !zoomTarget) {
+      return;
+    }
+
+    // Zoom to the target sensor with a default zoom level of 16
+    const zoomLevel = zoomTarget.zoomLevel || 16;
+    map.setView([zoomTarget.lat, zoomTarget.lng], zoomLevel, {
+      animate: true,
+      duration: 0.6,
+    });
+
+    // Clear the zoom target after zooming
+    setTimeout(() => {
+      setZoomTarget(null);
+    }, 700);
+  }, [zoomTarget, setZoomTarget]);
 
   return (
     <div

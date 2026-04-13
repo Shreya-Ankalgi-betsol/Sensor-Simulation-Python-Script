@@ -3,6 +3,7 @@ import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { RotateCcw } from "lucide-react";
 import { useWebSocket } from '../context/WebSocketContext'
+import { useActiveTab } from '../context/ActiveTabContext';
 import { useSensors } from "../context/SensorContext";
 import { apiGet, APIError } from '../services/apiClient';
 import { ThreatLog, ThreatSummaryOut, PagedThreats } from '../types/api';
@@ -46,6 +47,7 @@ type ActiveTab = 'live' | 'logs';
 export function Threats() {
   const { sensorList } = useSensors();
   const { liveThreats, isConnected, connectionStatus } = useWebSocket();
+  const { setActiveTab: updateGlobalActiveTab } = useActiveTab();
   
   // Tab management
   const [activeTab, setActiveTab] = useState<ActiveTab>('live');
@@ -305,6 +307,7 @@ export function Threats() {
   // Handle tab change
   const handleTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
+    updateGlobalActiveTab(tab);
     
     // When switching TO live tab, auto-start streaming (not paused)
     if (tab === 'live') {
@@ -507,7 +510,7 @@ export function Threats() {
               }}
             >
               {[
-                "Time",
+                `Time (${timezone})`,
                 "Threat",
                 "Sensor ID",
                 "Sensor Type",

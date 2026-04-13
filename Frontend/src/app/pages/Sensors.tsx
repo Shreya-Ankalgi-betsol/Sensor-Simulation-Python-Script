@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { SensorOut } from "../types/api";
 import {
   Dialog,
@@ -10,13 +11,17 @@ import {
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { ChevronDown, MoreVertical, Plus, RotateCcw } from "lucide-react";
+import { PencilIcon, MapPinIcon } from "@heroicons/react/16/solid";
 import { NotificationBell } from "../components/NotificationBell";
 import { useSensors } from "../context/SensorContext";
 import { useWebSocket } from "../context/WebSocketContext";
+import { useMapNavigation } from "../context/MapNavigationContext";
 
 export function Sensors() {
+  const navigate = useNavigate();
   const { sensorList, updateSensor, addSensor, fetchSensors, loading, error } = useSensors();
   const { liveThreats: threats } = useWebSocket();
+  const { setZoomTarget } = useMapNavigation();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingSensor, setEditingSensor] = useState<SensorOut | null>(null);
@@ -538,7 +543,9 @@ export function Sensors() {
                 padding: '8px 16px',
                 textAlign: 'left',
                 whiteSpace: 'nowrap',
-                display: 'block',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
                 transition: 'all 0.2s',
               }}
               onMouseEnter={(e) => {
@@ -550,7 +557,51 @@ export function Sensors() {
                 e.currentTarget.style.color = '#1E293B'
               }}
             >
+              <PencilIcon className="w-4 h-4" />
               Edit
+            </button>
+            <button
+              onClick={() => {
+                setOpenMenuId(null)
+                const sensor = sensorList.find(s => s.sensor_id === openMenuId)
+                if (sensor) {
+                  // Set zoom target and navigate to dashboard
+                  setZoomTarget({
+                    sensorId: sensor.sensor_id,
+                    lat: sensor.lat,
+                    lng: sensor.lng,
+                    zoomLevel: 16,
+                  });
+                  navigate('/');
+                }
+              }}
+              style={{
+                fontSize: '0.875rem',
+                color: '#1E293B',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                width: '100%',
+                padding: '8px 16px',
+                textAlign: 'left',
+                whiteSpace: 'nowrap',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.2s',
+                borderTop: '1px solid #E2E8F0',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#F0F9FF'
+                e.currentTarget.style.color = '#0284C7'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.color = '#1E293B'
+              }}
+            >
+              <MapPinIcon className="w-4 h-4" />
+              View on Map
             </button>
           </div>
         </>
