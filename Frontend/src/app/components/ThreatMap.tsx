@@ -14,8 +14,10 @@ export function ThreatMap() {
   const mapRef = useRef<L.Map | null>(null);
   const sensorLayerRef = useRef<L.LayerGroup | null>(null);
   const threatLayerRef = useRef<L.LayerGroup | null>(null);
+  const lastSensorLayoutKeyRef = useRef<string>('');
   const activeWindowMs = 2 * 60 * 1000;
   const threatPointWindowMs = 8 * 1000;
+  const threatFutureToleranceMs = 15 * 1000;
 
   const latestThreatBySensor = useMemo(() => {
     const threatMap = new Map<string, ThreatLog>();
@@ -139,10 +141,12 @@ export function ThreatMap() {
     const map = L.map(mapContainerRef.current, {
       zoomControl: true,
       preferCanvas: true,
+      maxZoom: 22,
     }).setView(defaultCenter, 12);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
+      maxZoom: 22,
+      maxNativeZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
 
@@ -178,9 +182,16 @@ export function ThreatMap() {
     const validSensors = sensorList.filter((sensor) => Number.isFinite(sensor.lat) && Number.isFinite(sensor.lng));
 
     if (validSensors.length === 0) {
+      lastSensorLayoutKeyRef.current = '';
       map.setView(defaultCenter, 12);
       return;
     }
+
+    const sensorLayoutKey = validSensors
+      .map((sensor) => `${sensor.sensor_id}:${sensor.lat.toFixed(6)}:${sensor.lng.toFixed(6)}`)
+      .sort()
+      .join('|');
+    const shouldAutoFrame = sensorLayoutKey !== lastSensorLayoutKeyRef.current;
 
     const bounds = L.latLngBounds([]);
     const coordinateGroups = new Map<string, number>();
@@ -291,8 +302,14 @@ export function ThreatMap() {
       bounds.extend(displayPosition);
     });
 
+    if (!shouldAutoFrame) {
+      return;
+    }
+
+    lastSensorLayoutKeyRef.current = sensorLayoutKey;
+
     if (validSensors.length === 1) {
-      map.setView([validSensors[0].lat, validSensors[0].lng], 15);
+      map.setView([validSensors[0].lat, validSensors[0].lng], 18);
       return;
     }
 
@@ -301,7 +318,7 @@ export function ThreatMap() {
       duration: 0.35,
       maxZoom: 16,
     });
-  }, [sensorList, defaultCenter]);
+  }, [sensorList, defaultCenter, latestThreatBySensor]);
 
   // Render threat points on the map
   useEffect(() => {
@@ -320,11 +337,11 @@ export function ThreatMap() {
         return false;
       }
       const ageMs = now - threatTimeMs;
-      return ageMs >= 0 && ageMs <= threatPointWindowMs;
+      return ageMs >= -threatFutureToleranceMs && ageMs <= threatPointWindowMs;
     });
 
     recentThreats.forEach((threat) => {
-      const ageMs = now - new Date(threat.timestamp).getTime();
+      const ageMs = Math.max(0, now - new Date(threat.timestamp).getTime());
       const normalizedAge = Math.min(1, Math.max(0, ageMs / threatPointWindowMs));
       const fillOpacity = 0.95 - normalizedAge * 0.75;
       const strokeOpacity = 0.85 - normalizedAge * 0.65;
@@ -364,7 +381,7 @@ export function ThreatMap() {
         fillOpacity: Math.max(0.15, fillOpacity),
       }).addTo(threatLayer);
     });
-  }, [liveThreats, sensorList]);
+  }, [liveThreats, sensorList, threatFutureToleranceMs]);
 
   // Handle zoom to specific sensor
   useEffect(() => {
