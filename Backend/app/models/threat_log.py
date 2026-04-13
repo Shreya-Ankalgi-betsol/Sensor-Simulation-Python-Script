@@ -29,9 +29,16 @@ class ThreatLog(Base):
         String, ForeignKey("sensors.sensor_id", ondelete="CASCADE"), nullable=False, index=True
     )
     sensor_type: Mapped[str] = mapped_column(String, nullable=False)
+    track_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    object_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    object_state: Mapped[str | None] = mapped_column(String, nullable=True)
     threat_type: Mapped[str] = mapped_column(String, nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     severity: Mapped[ThreatSeverity] = mapped_column(Enum(ThreatSeverity), nullable=False)
+    object_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    object_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    object_bearing_deg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    object_range_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )

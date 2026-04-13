@@ -56,8 +56,15 @@ class IngestionService:
                     "alert_id": threat_log.alert_id,
                     "sensor_id": threat_log.sensor_id,
                     "sensor_type": threat_log.sensor_type,
+                    "track_id": threat_log.track_id,
+                    "object_type": threat_log.object_type,
+                    "object_state": threat_log.object_state,
                     "threat_type": threat_log.threat_type,
                     "severity": threat_log.severity.value,
+                    "object_lat": threat_log.object_lat,
+                    "object_lng": threat_log.object_lng,
+                    "object_bearing_deg": threat_log.object_bearing_deg,
+                    "object_range_m": threat_log.object_range_m,
                     "timestamp": threat_log.timestamp.isoformat(),
                 }
                 await threat_service.push_alert(alert_data, db)
@@ -177,14 +184,24 @@ class IngestionService:
     ) -> list[ThreatLog]:
         threats = []
 
+        derived_position = self._extract_derived_position(payload.raw_detection)
+        identity = self._extract_object_identity(payload.raw_detection)
+
         for detected_object in detected_objects:
             severity = self._map_severity(detected_object.get("severity"))
             threat = ThreatLog(
                 sensor_id=payload.sensor_id,
                 sensor_type=payload.type,
+                track_id=identity.get("track_id"),
+                object_type=identity.get("object_type"),
+                object_state=identity.get("object_state"),
                 threat_type=str(detected_object.get("threat_type", detected_object.get("type", "unknown"))),
                 confidence=float(detected_object.get("confidence", 0.0)),
                 severity=severity,
+                object_lat=derived_position.get("object_lat"),
+                object_lng=derived_position.get("object_lng"),
+                object_bearing_deg=derived_position.get("bearing_deg"),
+                object_range_m=derived_position.get("range_m"),
                 timestamp=payload.timestamp,
             )
             db.add(threat)
@@ -211,6 +228,33 @@ class IngestionService:
         if value == "MEDIUM":
             return ThreatSeverity.med
         return ThreatSeverity.low
+
+    def _extract_derived_position(self, raw_detection: dict[str, Any]) -> dict[str, float | None]:
+        derived_position = raw_detection.get("derived_position") or {}
+
+        def _to_float(value: Any) -> float | None:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        return {
+            "object_lat": _to_float(derived_position.get("object_lat")),
+            "object_lng": _to_float(derived_position.get("object_lng")),
+            "bearing_deg": _to_float(derived_position.get("bearing_deg")),
+            "range_m": _to_float(derived_position.get("range_m")),
+        }
+
+    def _extract_object_identity(self, raw_detection: dict[str, Any]) -> dict[str, str | None]:
+        track_id = raw_detection.get("track_id")
+        object_type = raw_detection.get("object_type")
+        object_state = raw_detection.get("object_state")
+
+        return {
+            "track_id": str(track_id) if track_id else None,
+            "object_type": str(object_type) if object_type else None,
+            "object_state": str(object_state) if object_state else None,
+        }
 
 
 ingestion_service = IngestionService()

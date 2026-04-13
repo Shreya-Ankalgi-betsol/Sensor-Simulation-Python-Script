@@ -11,9 +11,16 @@ class ThreatOut(BaseModel):
     alert_id: str
     sensor_id: str
     sensor_type: str
+    track_id: str | None = None
+    object_type: str | None = None
+    object_state: str | None = None
     threat_type: str
     confidence: float
     severity: ThreatSeverity
+    object_lat: float | None = None
+    object_lng: float | None = None
+    object_bearing_deg: float | None = None
+    object_range_m: float | None = None
     
     timestamp: datetime
 

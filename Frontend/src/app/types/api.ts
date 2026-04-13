@@ -27,10 +27,17 @@ export interface ThreatLog {
   alert_id: string
   sensor_id: string
   sensor_type: string
+  track_id?: string | null
+  object_type?: string | null
+  object_state?: string | null
   threat_type: string // e.g. "drone", "person", "vehicle"
   confidence: number // 0-1
   severity: string // 'low' | 'med' | 'high'
   timestamp: string // ISO datetime
+  object_lat?: number | null
+  object_lng?: number | null
+  object_bearing_deg?: number | null
+  object_range_m?: number | null
 }
 
 /**
