@@ -19,10 +19,10 @@ class BucketBy(str, enum.Enum):
 class AnalyticsFilter(BaseModel):
     from_dt: Optional[datetime] = None
     to_dt: Optional[datetime] = None
-    location: Optional[str] = None
-    sensor_type: Optional[SensorType] = None
-    severity: Optional[ThreatSeverity] = None
-    threat_type: Optional[str] = None
+    location: Optional[list[str]] = None
+    sensor_type: Optional[list[SensorType]] = None
+    severity: Optional[list[ThreatSeverity]] = None
+    threat_type: Optional[list[str]] = None
     bucket_by: BucketBy = BucketBy.hour
 
 
