@@ -23,21 +23,37 @@ export default function CheckboxGroup({
   placeholderText = 'All Options',
 }: CheckboxGroupProps) {
   const [isOpen, setIsOpen] = useState(false)
+  // Temporary UI state: updates on every checkbox click while dropdown is open
+  const [tempSelected, setTempSelected] = useState<string[]>(selected)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
+  // When dropdown opens, initialize temp state from committed state
+  const handleOpenDropdown = () => {
+    setTempSelected(selected)
+    setIsOpen(true)
+  }
+
+  // When dropdown closes, commit temp state to parent
+  const commitSelection = () => {
+    onChange(tempSelected)
+    setIsOpen(false)
+  }
+
   const handleToggle = (value: string) => {
-    const newSelected = selected.includes(value)
-      ? selected.filter(s => s !== value)
-      : [...selected, value]
-    onChange(newSelected)
+    // Update temporary local state only - no parent onChange yet
+    setTempSelected(current =>
+      current.includes(value)
+        ? current.filter(s => s !== value)
+        : [...current, value]
+    )
     // Keep dropdown open when clicking checkbox
   }
 
-  // Close dropdown when clicking outside
+  // Close dropdown and commit when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
+        commitSelection()
       }
     }
 
@@ -45,7 +61,7 @@ export default function CheckboxGroup({
       document.addEventListener('mousedown', handleClickOutside)
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isOpen])
+  }, [isOpen, tempSelected])
 
   const selectedCount = selected.length
 
@@ -82,7 +98,7 @@ export default function CheckboxGroup({
 
       {/* Trigger Button */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => handleOpenDropdown()}
         disabled={disabled}
         className="w-full"
         style={{
@@ -148,22 +164,22 @@ export default function CheckboxGroup({
                 gap: '12px',
                 padding: '12px 14px',
                 cursor: 'pointer',
-                background: selected.includes(option.value) ? '#E0F2FE' : 'transparent',
+                background: tempSelected.includes(option.value) ? '#E0F2FE' : 'transparent',
                 fontSize: '0.9rem',
                 color: 'var(--text-primary)',
                 transition: 'background 0.15s',
                 whiteSpace: 'nowrap',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = selected.includes(option.value) ? '#E0F2FE' : '#F0F9FF'
+                e.currentTarget.style.background = tempSelected.includes(option.value) ? '#E0F2FE' : '#F0F9FF'
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.background = selected.includes(option.value) ? '#E0F2FE' : 'transparent'
+                e.currentTarget.style.background = tempSelected.includes(option.value) ? '#E0F2FE' : 'transparent'
               }}
             >
               <input
                 type="checkbox"
-                checked={selected.includes(option.value)}
+                checked={tempSelected.includes(option.value)}
                 onChange={() => handleToggle(option.value)}
                 style={{
                   width: '18px',
