@@ -4,45 +4,14 @@ import 'react-datepicker/dist/react-datepicker.css'
 import { RotateCcw } from "lucide-react";
 import { useWebSocket } from '../context/WebSocketContext'
 import { useActiveTab } from '../context/ActiveTabContext';
+import { useTimezone } from '../context/TimezoneContext';
 import { useSensors } from "../context/SensorContext";
 import { apiGet, APIError } from '../services/apiClient';
 import { ThreatLog, ThreatSummaryOut, PagedThreats } from '../types/api';
 import HeadlessUIDropdown from '../components/HeadlessUIDropdown';
 import CheckboxGroup from '../components/CheckboxGroup';
 import { NotificationBell } from '../components/NotificationBell';
-
-// Common IANA timezones
-const COMMON_TIMEZONES = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Anchorage',
-  'Pacific/Honolulu',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Moscow',
-  'Asia/Dubai',
-  'Asia/Kolkata',
-  'Asia/Bangkok',
-  'Asia/Shanghai',
-  'Asia/Hong_Kong',
-  'Asia/Tokyo',
-  'Asia/Seoul',
-  'Australia/Sydney',
-  'Australia/Melbourne',
-  'Australia/Perth',
-  'Pacific/Auckland',
-  'Pacific/Fiji',
-  'Africa/Cairo',
-  'Africa/Johannesburg',
-  'America/Toronto',
-  'America/Mexico_City',
-  'America/Buenos_Aires',
-  'America/Sao_Paulo',
-];
+import { formatTimestampInTimezone, getTimezoneAbbr } from '../services/timezoneUtils';
 
 type ActiveTab = 'live' | 'logs';
 
@@ -50,6 +19,7 @@ export function Threats() {
   const { sensorList } = useSensors();
   const { liveThreats, isConnected, connectionStatus } = useWebSocket();
   const { setActiveTab: updateGlobalActiveTab } = useActiveTab();
+  const { timezone } = useTimezone();
   
   // Tab management
   const [activeTab, setActiveTab] = useState<ActiveTab>('live');
@@ -75,7 +45,6 @@ export function Threats() {
   const [filterSeverities, setFilterSeverities] = useState<string[]>([]);
   const [fromDateTime, setFromDateTime] = useState<Date | null>(null)
   const [toDateTime, setToDateTime] = useState<Date | null>(null)
-  const [timezone, setTimezone] = useState<string>('UTC');
   const [availableThreatTypes, setAvailableThreatTypes] = useState<string[]>([]);
   
   const [error, setError] = useState<string | null>(null);
@@ -94,24 +63,6 @@ export function Threats() {
     logLoadingMore: false,
     fetchThreatLogs: null as any,
   });
-
-  // Helper function to format UTC timestamp
-  const formatTimestampInTimezone = (utcTimestamp: string, tz: string = timezone): string => {
-    try {
-      return new Date(utcTimestamp).toLocaleString('en-US', {
-        timeZone: tz,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true,
-      });
-    } catch {
-      return utcTimestamp;
-    }
-  };
 
   // Helper function to calculate date range
   const calculateDateRange = (): { from_dt: string | null; to_dt: string | null } => {
@@ -498,7 +449,7 @@ export function Threats() {
               }}
             >
               {[
-                isLiveTab ? "Time (UTC)" : `Time (${timezone})`,
+                `Time (${timezone})`,
                 "Threat",
                 "Sensor ID",
                 "Sensor Type",
@@ -562,7 +513,7 @@ export function Threats() {
                       fontFamily: "var(--font-mono)",
                     }}
                   >
-                    {formatTimestampInTimezone(threat.timestamp, isLiveTab ? 'UTC' : timezone)}
+                    {formatTimestampInTimezone(threat.timestamp, timezone)}
                   </td>
                   <td
                     className="px-4 py-3"

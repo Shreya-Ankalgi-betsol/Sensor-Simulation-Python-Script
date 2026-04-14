@@ -16,12 +16,15 @@ import { NotificationBell } from "../components/NotificationBell";
 import { useSensors } from "../context/SensorContext";
 import { useWebSocket } from "../context/WebSocketContext";
 import { useMapNavigation } from "../context/MapNavigationContext";
+import { useTimezone } from "../context/TimezoneContext";
+import { formatTimestampInTimezone } from "../services/timezoneUtils";
 
 export function Sensors() {
   const navigate = useNavigate();
   const { sensorList, updateSensor, addSensor, fetchSensors, loading, error } = useSensors();
   const { liveThreats: threats } = useWebSocket();
   const { setZoomTarget } = useMapNavigation();
+  const { timezone } = useTimezone();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingSensor, setEditingSensor] = useState<SensorOut | null>(null);
@@ -458,7 +461,7 @@ export function Sensors() {
                         fontFamily: "var(--font-mono)",
                       }}
                     >
-                      {new Date(sensor.created_at).toLocaleString()}
+                      {formatTimestampInTimezone(sensor.created_at, timezone)}
                     </td>
                     <td className="px-4 py-3 relative" style={{ position: 'relative' }}>
                       <button

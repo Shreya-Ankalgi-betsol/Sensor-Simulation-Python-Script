@@ -18,7 +18,6 @@ import {
 } from 'recharts';
 import { Download, RotateCcw } from 'lucide-react';
 import { parseISO, formatISO } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
 import { NotificationBell } from '../components/NotificationBell';
 import HeadlessUIDropdown from '../components/HeadlessUIDropdown';
 import { useWebSocket } from '../context/WebSocketContext';
@@ -48,28 +47,9 @@ export function Visualization() {
   const [filterSeverity, setFilterSeverity] = useState('All');
   const [fromDateTime, setFromDateTime] = useState<Date | null>(null);
   const [toDateTime, setToDateTime] = useState<Date | null>(null);
-  const [timezone, setTimezone] = useState<string>(() => {
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch {
-      return 'UTC';
-    }
-  });
-  const [availableTimezones, setAvailableTimezones] = useState<string[]>([]);
   const [availableThreatTypes, setAvailableThreatTypes] = useState<string[]>([]);
   const [availableLocations, setAvailableLocations] = useState<string[]>([]);
   const isUpdatingFromSensorTypeRef = useRef<boolean>(false);
-
-  // Initialize available timezones
-  useEffect(() => {
-    try {
-      const tzs = Intl.supportedValuesOf('timeZone');
-      setAvailableTimezones(tzs);
-    } catch {
-      // Fallback to common timezones if not supported
-      setAvailableTimezones(['UTC', 'America/New_York', 'Europe/London', 'Asia/Tokyo']);
-    }
-  }, []);
 
   // Fetch all available threat types (independent of filters, or filtered by sensor type)
   const fetchAvailableThreatTypes = useCallback(async (sensorType: string = 'All') => {
@@ -134,11 +114,9 @@ export function Visualization() {
     } else if (filterTimeRange === 'Last 30 Days') {
       startTime = formatISO(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
     } else if (filterTimeRange === 'Custom' && fromDateTime && toDateTime) {
-      // Convert to timezone-adjusted ISO format
-      const startZoned = toZonedTime(fromDateTime, timezone);
-      const endZoned = toZonedTime(toDateTime, timezone);
-      startTime = formatISO(startZoned);
-      endTime = formatISO(endZoned);
+      // Send UTC dates to backend
+      startTime = formatISO(fromDateTime);
+      endTime = formatISO(toDateTime);
     }
 
     if (startTime) {
@@ -221,7 +199,7 @@ export function Visualization() {
       }
     };
     fetchAnalytics();
-  }, [filterTimeRange, filterLocation, filterThreatType, filterSensorType, filterSeverity, fromDateTime, toDateTime, timezone]);
+  }, [filterTimeRange, filterLocation, filterThreatType, filterSensorType, filterSeverity, fromDateTime, toDateTime]);
 
   // Merge API threats with live threats, removing duplicates by alert_id
   const mergedThreats = Array.from(
@@ -277,11 +255,6 @@ export function Visualization() {
     setFilterSeverity('All');
     setFromDateTime(null);
     setToDateTime(null);
-    try {
-      setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    } catch {
-      setTimezone('UTC');
-    }
   };
 
   return (
@@ -496,19 +469,6 @@ export function Visualization() {
                     { value: "low", label: "Low" },
                   ]}
                   label="Severity"
-                />
-              </div>
-
-              {/* Timezone */}
-              <div className="flex-1 min-w-[150px]">
-                <HeadlessUIDropdown
-                  value={timezone}
-                  onChange={setTimezone}
-                  options={availableTimezones.map((tz) => ({
-                    value: tz,
-                    label: tz,
-                  }))}
-                  label="Timezone"
                 />
               </div>
 

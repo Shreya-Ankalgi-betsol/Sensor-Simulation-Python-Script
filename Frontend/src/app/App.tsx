@@ -4,6 +4,7 @@ import { SensorProvider } from './context/SensorContext'
 import { WebSocketProvider } from './context/WebSocketContext'
 import { ActiveTabProvider } from './context/ActiveTabContext'
 import { MapNavigationProvider } from './context/MapNavigationContext'
+import { TimezoneProvider } from './context/TimezoneContext'
 
 function App() {
   return (
@@ -11,7 +12,9 @@ function App() {
       <WebSocketProvider>
         <ActiveTabProvider>
           <MapNavigationProvider>
-            <RouterProvider router={router} />
+            <TimezoneProvider>
+              <RouterProvider router={router} />
+            </TimezoneProvider>
           </MapNavigationProvider>
         </ActiveTabProvider>
       </WebSocketProvider>

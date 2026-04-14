@@ -70,10 +70,11 @@ export default function HeadlessUIDropdown({
             minWidth: '300px',
             maxWidth: 'calc(100vw - 24px)',
             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-            zIndex: 50,
+            zIndex: 9999,
             padding: '4px',
             maxHeight: '300px',
             overflowY: 'auto',
+            position: 'fixed',
           }}
         >
           {options.map((option) => (
