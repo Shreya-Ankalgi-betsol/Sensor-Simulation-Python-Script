@@ -9,6 +9,7 @@ import { apiGet, APIError } from '../services/apiClient';
 import { ThreatLog, ThreatSummaryOut, PagedThreats } from '../types/api';
 import HeadlessUIDropdown from '../components/HeadlessUIDropdown';
 import CheckboxGroup from '../components/CheckboxGroup';
+import { NotificationBell } from '../components/NotificationBell';
 
 // Common IANA timezones
 const COMMON_TIMEZONES = [
@@ -305,8 +306,8 @@ export function Threats() {
       setStreamPauseTimestamp(null);
     }
 
-    // Fetch logs when switching to logs tab for the first time
-    if (tab === 'logs' && logThreats.length === 0) {
+    // Always refresh threat logs when the logs tab is clicked.
+    if (tab === 'logs') {
       fetchThreatLogs(null, true);
     }
   };
@@ -497,7 +498,7 @@ export function Threats() {
               }}
             >
               {[
-                `Time (${timezone})`,
+                isLiveTab ? "Time (UTC)" : `Time (${timezone})`,
                 "Threat",
                 "Sensor ID",
                 "Sensor Type",
@@ -561,7 +562,7 @@ export function Threats() {
                       fontFamily: "var(--font-mono)",
                     }}
                   >
-                    {formatTimestampInTimezone(threat.timestamp, activeTab === 'live' ? 'UTC' : timezone)}
+                    {formatTimestampInTimezone(threat.timestamp, isLiveTab ? 'UTC' : timezone)}
                   </td>
                   <td
                     className="px-4 py-3"
@@ -758,6 +759,14 @@ export function Threats() {
 
         {!loading && !error && (
           <>
+            {activeTab === 'logs' && (
+              <NotificationBell
+                liveThreats={liveThreats}
+                enableToasts={false}
+                clearOnMarkAllRead
+              />
+            )}
+
             {/* Page Header with Tabs */}
             <div>
               <div className="flex items-start justify-between gap-4">

@@ -173,7 +173,7 @@ export function Sensors() {
   return (
     <div className="p-6 space-y-6">
       {/* Notification Bell */}
-      <NotificationBell liveThreats={threats} enableToasts={false} />
+      <NotificationBell liveThreats={threats} enableToasts={false} clearOnMarkAllRead />
 
       {/* Error Message */}
       {error && (
@@ -231,9 +231,6 @@ export function Sensors() {
           >
             SENSORS
           </h1>
-          <p className="mt-1 max-w-2xl" style={{ color: 'var(--text-secondary)', fontSize: 'var(--fs-2)' }}>
-            Manage sensor inventory, status, and coverage from one central place.
-          </p>
         </div>
 
         {/* Add Sensor Button */}

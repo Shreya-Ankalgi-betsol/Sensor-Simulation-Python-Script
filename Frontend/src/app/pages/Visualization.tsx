@@ -345,7 +345,11 @@ export function Visualization() {
       `}</style>
       <div className="p-4 space-y-4 xl:p-5">
         {/* Notification Bell */}
-        <NotificationBell liveThreats={liveThreats} />
+        <NotificationBell
+          liveThreats={liveThreats}
+          enableToasts={false}
+          clearOnMarkAllRead
+        />
 
         {/* Page Header */}
         <div className="flex flex-wrap items-end justify-between gap-3">

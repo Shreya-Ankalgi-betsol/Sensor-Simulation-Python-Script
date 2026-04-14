@@ -16,22 +16,52 @@ interface Notification {
 interface NotificationBellProps {
   liveThreats?: ThreatLog[];
   enableToasts?: boolean;
+  clearOnMarkAllRead?: boolean;
 }
 
-export function NotificationBell({ liveThreats = [], enableToasts = true }: NotificationBellProps) {
+export function NotificationBell({
+  liveThreats = [],
+  enableToasts = true,
+  clearOnMarkAllRead = false,
+}: NotificationBellProps) {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showPanel, setShowPanel] = useState(false);
   const [toasts, setToasts] = useState<Notification[]>([]);
+  const [isAlerting, setIsAlerting] = useState(false);
   const seenIdsRef = useRef<Set<string>>(new Set()); // Use ref to track seen IDs without triggering re-renders
+  const hasInitializedRef = useRef(false);
+  const bellAlertTimeoutRef = useRef<number | null>(null);
   
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  const triggerBellAlert = () => {
+    setIsAlerting(true);
+
+    if (bellAlertTimeoutRef.current !== null) {
+      window.clearTimeout(bellAlertTimeoutRef.current);
+    }
+
+    bellAlertTimeoutRef.current = window.setTimeout(() => {
+      setIsAlerting(false);
+      bellAlertTimeoutRef.current = null;
+    }, 3000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (bellAlertTimeoutRef.current !== null) {
+        window.clearTimeout(bellAlertTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (liveThreats.length === 0) return;
 
-    // First time this runs — mark all existing threats as seen silently
-    if (notifications.length === 0) {
+    // First run only: seed existing threats silently so only later threats appear as new.
+    if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true;
       liveThreats.forEach((t) => seenIdsRef.current.add(t.alert_id));
       
       const initialNotifications: Notification[] = liveThreats.slice(0, 10).map((t) => ({
@@ -43,7 +73,7 @@ export function NotificationBell({ liveThreats = [], enableToasts = true }: Noti
         isRead: true,
       }));
       setNotifications(initialNotifications);
-      return; // stop here — no toasts on initial load
+      return;
     }
 
     // After init — only process genuinely new threats
@@ -61,6 +91,7 @@ export function NotificationBell({ liveThreats = [], enableToasts = true }: Noti
         };
 
         setNotifications((prev) => [newNotification, ...prev.slice(0, 9)]);
+        triggerBellAlert();
         if (enableToasts) {
           setToasts((prev) => [...prev, newNotification]);
 
@@ -92,6 +123,11 @@ export function NotificationBell({ liveThreats = [], enableToasts = true }: Noti
   };
 
   const markAllAsRead = () => {
+    if (clearOnMarkAllRead) {
+      setNotifications([]);
+      return;
+    }
+
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
   };
 
@@ -106,15 +142,18 @@ export function NotificationBell({ liveThreats = [], enableToasts = true }: Noti
           onClick={() => setShowPanel(!showPanel)}
           className="relative p-2 rounded-2xl transition-all duration-200 shadow-sm"
           style={{
-            background: 'rgba(255,255,255,0.95)',
-            border: '1px solid rgba(226,232,240,0.9)',
-            color: 'var(--accent-cyan)',
+            background: isAlerting ? 'rgba(220,38,38,0.12)' : 'rgba(255,255,255,0.95)',
+            border: isAlerting ? '1px solid rgba(220,38,38,0.5)' : '1px solid rgba(226,232,240,0.9)',
+            color: isAlerting ? '#B91C1C' : 'var(--accent-cyan)',
+            animation: isAlerting ? 'bellBlink 0.8s ease-in-out infinite' : 'none',
           }}
           onMouseEnter={(e) => {
+            if (isAlerting) return;
             e.currentTarget.style.background = 'rgba(14,165,233,0.08)';
             e.currentTarget.style.borderColor = 'rgba(14,165,233,0.35)';
           }}
           onMouseLeave={(e) => {
+            if (isAlerting) return;
             e.currentTarget.style.background = 'rgba(255,255,255,0.95)';
             e.currentTarget.style.borderColor = 'rgba(226,232,240,0.9)';
           }}
@@ -198,84 +237,96 @@ export function NotificationBell({ liveThreats = [], enableToasts = true }: Noti
 
               {/* Notification List */}
               <div className="flex-1 overflow-y-auto">
-                {notifications.map((notification) => (
+                {notifications.length === 0 ? (
                   <div
-                    key={notification.id}
-                    className="px-4 py-4 border-b transition-colors cursor-pointer group"
+                    className="px-4 py-8 text-center"
                     style={{
-                      background: notification.isRead ? 'rgba(255,255,255,0.92)' : 'rgba(239,246,255,0.95)',
-                      borderColor: 'rgba(226,232,240,0.9)',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(240,249,255,0.95)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = notification.isRead ? 'rgba(255,255,255,0.92)' : 'rgba(239,246,255,0.95)';
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.9rem',
                     }}
                   >
-                    <div className="flex items-start gap-2">
-                      {/* Severity Dot */}
-                      <div
-                        className="w-2 h-2 rounded-full mt-2 flex-shrink-0"
-                        style={{ background: getSeverityColor(notification.severity) }}
-                      />
-                      
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div
-                          className="mb-1"
-                          style={{
-                            fontSize: '1.00625rem',
-                            fontWeight: 600,
-                            color: 'var(--text-primary)',
-                          }}
-                        >
-                          {notification.type}
-                        </div>
-                        <div
-                          className="mb-1"
-                          style={{
-                            fontSize: '0.865rem',
-                            color: 'var(--text-secondary)',
-                          }}
-                        >
-                          {notification.description}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: '0.71875rem',
-                            color: '#9CA3AF',
-                            fontFamily: 'var(--font-mono)',
-                          }}
-                        >
-                          {notification.timestamp?.split(',')[1]?.trim() || notification.timestamp || 'N/A'}
-                        </div>
-                      </div>
-                      
-                      {/* Close Button */}
-                      <button
-                        onClick={() => {
-                          setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
-                        }}
-                        className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                        style={{ 
-                          background: 'transparent', 
-                          border: 'none', 
-                          cursor: 'pointer',
-                          color: '#9CA3AF'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.color = '#1E293B';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.color = '#9CA3AF';
-                        }}
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
+                    No notifications yet
                   </div>
-                ))}
+                ) : (
+                  notifications.map((notification) => (
+                    <div
+                      key={notification.id}
+                      className="px-4 py-4 border-b transition-colors cursor-pointer group"
+                      style={{
+                        background: notification.isRead ? 'rgba(255,255,255,0.92)' : 'rgba(239,246,255,0.95)',
+                        borderColor: 'rgba(226,232,240,0.9)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(240,249,255,0.95)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = notification.isRead ? 'rgba(255,255,255,0.92)' : 'rgba(239,246,255,0.95)';
+                      }}
+                    >
+                      <div className="flex items-start gap-2">
+                        {/* Severity Dot */}
+                        <div
+                          className="w-2 h-2 rounded-full mt-2 flex-shrink-0"
+                          style={{ background: getSeverityColor(notification.severity) }}
+                        />
+                        
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <div
+                            className="mb-1"
+                            style={{
+                              fontSize: '1.00625rem',
+                              fontWeight: 600,
+                              color: 'var(--text-primary)',
+                            }}
+                          >
+                            {notification.type}
+                          </div>
+                          <div
+                            className="mb-1"
+                            style={{
+                              fontSize: '0.865rem',
+                              color: 'var(--text-secondary)',
+                            }}
+                          >
+                            {notification.description}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '0.71875rem',
+                              color: '#9CA3AF',
+                              fontFamily: 'var(--font-mono)',
+                            }}
+                          >
+                            {notification.timestamp?.split(',')[1]?.trim() || notification.timestamp || 'N/A'}
+                          </div>
+                        </div>
+                        
+                        {/* Close Button */}
+                        <button
+                          onClick={() => {
+                            setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
+                          }}
+                          className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          style={{ 
+                            background: 'transparent', 
+                            border: 'none', 
+                            cursor: 'pointer',
+                            color: '#9CA3AF'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = '#1E293B';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = '#9CA3AF';
+                          }}
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
 
               {/* Footer */}
@@ -403,6 +454,21 @@ export function NotificationBell({ liveThreats = [], enableToasts = true }: Noti
       )}
 
       <style>{`
+        @keyframes bellBlink {
+          0% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.35);
+          }
+          50% {
+            transform: scale(1.08);
+            box-shadow: 0 0 0 8px rgba(220, 38, 38, 0);
+          }
+          100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
+          }
+        }
+
         @keyframes slideInToast {
           from {
             transform: translateY(12px);
