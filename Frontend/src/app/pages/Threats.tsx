@@ -1073,9 +1073,14 @@ export function Threats() {
                       border: '1px solid rgba(226,232,240,0.9)',
                     }}
                   >
-                    <div className="flex flex-wrap items-end gap-4">
+                    <div 
+                      className="grid gap-4"
+                      style={{
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                      }}
+                    >
                       {/* Time Range */}
-                      <div className="flex-1 min-w-[150px]">
+                      <div>
                         <HeadlessUIDropdown
                           value={filterTime}
                           onChange={setFilterTime}
@@ -1086,53 +1091,56 @@ export function Threats() {
                             { value: "Last 2 Hours", label: "Last 2 Hours" },
                             { value: "Custom", label: "Custom" },
                           ]}
-                          label="Time Range"
+                          label="TIME RANGE"
                         />
                       </div>
 
                       {/* Sensor Type */}
-                      <div className="flex-1 min-w-[150px]">
+                      <div>
                         <CheckboxGroup
-                          label="Sensor Type"
+                          label="SENSOR TYPE"
                           options={[
                             { value: "radar", label: "Radar" },
                             { value: "lidar", label: "Lidar" },
                           ]}
                           selected={filterSensorTypes}
                           onChange={setFilterSensorTypes}
+                          placeholderText="All Types"
                         />
                       </div>
 
                       {/* Sensor ID */}
-                      <div className="flex-1 min-w-[150px]">
+                      <div>
                         <CheckboxGroup
-                          label="Sensor ID"
+                          label="SENSOR ID"
                           options={filteredSensors.map((sensor) => ({
                             value: sensor.sensor_id,
                             label: sensor.sensor_id,
                           }))}
                           selected={filterSensorIds}
                           onChange={setFilterSensorIds}
+                          placeholderText="All Sensors"
                         />
                       </div>
 
                       {/* Threat Type */}
-                      <div className="flex-1 min-w-[150px]">
+                      <div>
                         <CheckboxGroup
-                          label="Threat Type"
+                          label="THREAT TYPE"
                           options={availableThreatTypes.map((threatType) => ({
                             value: threatType,
                             label: threatType,
                           }))}
                           selected={filterThreatTypes}
                           onChange={setFilterThreatTypes}
+                          placeholderText="All Threats"
                         />
                       </div>
 
                       {/* Severity */}
-                      <div className="flex-1 min-w-[150px]">
+                      <div>
                         <CheckboxGroup
-                          label="Severity"
+                          label="SEVERITY"
                           options={[
                             { value: "high", label: "High" },
                             { value: "med", label: "Medium" },
@@ -1140,27 +1148,15 @@ export function Threats() {
                           ]}
                           selected={filterSeverities}
                           onChange={setFilterSeverities}
-                        />
-                      </div>
-
-                      {/* Timezone */}
-                      <div className="flex-1 min-w-[150px]">
-                        <HeadlessUIDropdown
-                          value={timezone}
-                          onChange={setTimezone}
-                          options={COMMON_TIMEZONES.map((tz) => ({
-                            value: tz,
-                            label: tz,
-                          }))}
-                          label="Timezone"
+                          placeholderText="All Severities"
                         />
                       </div>
 
                       {/* Reset Button */}
-                      <div>
+                      <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                         <button
                           onClick={resetFilters}
-                          className="flex items-center gap-2 px-4 py-2 rounded transition-all duration-200"
+                          className="flex items-center gap-2 px-4 py-2 rounded transition-all duration-200 w-full justify-center"
                           style={{
                             background: "transparent",
                             border: "1px solid #E2E8F0",

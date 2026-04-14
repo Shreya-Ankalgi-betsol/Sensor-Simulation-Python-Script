@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 
 interface CheckboxOption {
   label: string
@@ -11,6 +11,7 @@ interface CheckboxGroupProps {
   selected: string[]
   onChange: (values: string[]) => void
   disabled?: boolean
+  placeholderText?: string
 }
 
 export default function CheckboxGroup({
@@ -19,30 +20,51 @@ export default function CheckboxGroup({
   selected,
   onChange,
   disabled = false,
+  placeholderText = 'All Options',
 }: CheckboxGroupProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   const handleToggle = (value: string) => {
     const newSelected = selected.includes(value)
       ? selected.filter(s => s !== value)
       : [...selected, value]
     onChange(newSelected)
+    // Keep dropdown open when clicking checkbox
   }
 
-  const handleSelectAll = () => {
-    if (selected.length === options.length) {
-      onChange([])
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isOpen])
+
+  const selectedCount = selected.length
+
+  // Get display text for trigger button
+  const getDisplayText = () => {
+    if (selectedCount === 0) {
+      return placeholderText
+    } else if (selectedCount === 1) {
+      // Show the selected value itself
+      const selectedOption = options.find(o => o.value === selected[0])
+      return selectedOption?.label || selected[0]
     } else {
-      onChange(options.map(o => o.value))
+      // Show count
+      return `${selectedCount} selected`
     }
   }
 
-  const selectedCount = selected.length
-  const allSelected = selectedCount === options.length
-  const someSelected = selectedCount > 0 && !allSelected
-
   return (
-    <div className="relative">
+    <div className="relative" ref={dropdownRef}>
       {/* Label */}
       <label
         className="block mb-2"
@@ -71,7 +93,7 @@ export default function CheckboxGroup({
           border: '1px solid #E2E8F0',
           borderRadius: '6px',
           fontSize: '1.00625rem',
-          color: 'var(--text-primary)',
+          color: selectedCount > 0 ? 'var(--text-primary)' : 'var(--text-secondary)',
           background: '#FFFFFF',
           fontFamily: 'inherit',
           transition: 'all 0.2s duration',
@@ -89,38 +111,10 @@ export default function CheckboxGroup({
           }
         }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {selectedCount > 0 ? (
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '20px',
-                height: '20px',
-                borderRadius: '4px',
-                background: '#0284C7',
-                color: '#FFFFFF',
-                fontSize: '0.75rem',
-                fontWeight: 700,
-              }}
-            >
-              {selectedCount}
-            </span>
-          ) : (
-            <span
-              style={{
-                display: 'inline-block',
-                width: '20px',
-                height: '20px',
-                borderRadius: '4px',
-                border: '2px solid #E2E8F0',
-              }}
-            />
-          )}
-          <span>{selectedCount > 0 ? `${selectedCount} selected` : 'Select...'}</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+          {getDisplayText()}
         </span>
-        <span style={{ fontSize: '0.875rem', color: '#94A3B8' }}>
+        <span style={{ fontSize: '0.875rem', color: '#94A3B8', marginLeft: '8px', flexShrink: 0 }}>
           {isOpen ? '▲' : '▼'}
         </span>
       </button>
@@ -132,7 +126,6 @@ export default function CheckboxGroup({
             position: 'absolute',
             top: '100%',
             left: 0,
-            right: 0,
             marginTop: '4px',
             background: '#FFFFFF',
             border: '1px solid #E2E8F0',
@@ -141,48 +134,10 @@ export default function CheckboxGroup({
             zIndex: 50,
             maxHeight: '300px',
             overflowY: 'auto',
+            minWidth: '300px',
+            maxWidth: 'calc(100vw - 24px)',
           }}
         >
-          {/* Select All Option */}
-          {options.length > 1 && (
-            <>
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '10px 12px',
-                  borderBottom: '1px solid #E2E8F0',
-                  cursor: 'pointer',
-                  background: someSelected ? '#F0F9FF' : undefined,
-                  fontSize: '0.9rem',
-                  fontWeight: 600,
-                  color: 'var(--text-primary)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#F0F9FF'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = someSelected ? '#F0F9FF' : 'transparent'
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  indeterminate={someSelected as any}
-                  onChange={handleSelectAll}
-                  style={{
-                    width: '16px',
-                    height: '16px',
-                    cursor: 'pointer',
-                    accentColor: '#0284C7',
-                  }}
-                />
-                <span>Select All</span>
-              </label>
-            </>
-          )}
-
           {/* Options */}
           {options.map((option) => (
             <label
@@ -190,16 +145,17 @@ export default function CheckboxGroup({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
-                padding: '10px 12px',
+                gap: '12px',
+                padding: '12px 14px',
                 cursor: 'pointer',
                 background: selected.includes(option.value) ? '#E0F2FE' : 'transparent',
                 fontSize: '0.9rem',
                 color: 'var(--text-primary)',
                 transition: 'background 0.15s',
+                whiteSpace: 'nowrap',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.background = '#F0F9FF'
+                e.currentTarget.style.background = selected.includes(option.value) ? '#E0F2FE' : '#F0F9FF'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.background = selected.includes(option.value) ? '#E0F2FE' : 'transparent'
@@ -210,31 +166,17 @@ export default function CheckboxGroup({
                 checked={selected.includes(option.value)}
                 onChange={() => handleToggle(option.value)}
                 style={{
-                  width: '16px',
-                  height: '16px',
+                  width: '18px',
+                  height: '18px',
                   cursor: 'pointer',
                   accentColor: '#0284C7',
+                  flexShrink: 0,
                 }}
               />
-              <span>{option.label}</span>
+              <span style={{ whiteSpace: 'nowrap' }}>{option.label}</span>
             </label>
           ))}
         </div>
-      )}
-
-      {/* Close dropdown when clicking outside */}
-      {isOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 40,
-          }}
-          onClick={() => setIsOpen(false)}
-        />
       )}
     </div>
   )
