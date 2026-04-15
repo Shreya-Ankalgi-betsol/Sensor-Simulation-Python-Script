@@ -1,5 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router";
 import type { Ref } from "react";
+
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { RotateCcw } from "lucide-react";
@@ -248,9 +250,12 @@ const ThreatTable = ({
 );
 
 export function Threats() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { sensorList } = useSensors();
   const { liveThreats, isConnected, connectionStatus } = useWebSocket();
-  const { setActiveTab: updateGlobalActiveTab } = useActiveTab();
+  const { activeTab: globalActiveTab, setActiveTab: updateGlobalActiveTab } = useActiveTab();
+  const { activeTab: globalActiveTab, setActiveTab: updateGlobalActiveTab } = useActiveTab();
   const { timezone } = useTimezone();
   
   // Tab management
@@ -436,12 +441,79 @@ export function Threats() {
     fetchAvailableThreatTypes();
   }, [fetchAvailableThreatTypes]);
 
-  // When sensor types change, reset sensor IDs and threat types, then fetch filtered threat types
+  // Prefill sensor filter from query param: /threats?sensor_id=RADAR-1
+  // Prefill sensor filter from query param: /threats?sensor_id=RADAR-1
   useEffect(() => {
-    setFilterSensorIds([]);
+    const sensorIdFromQuery = searchParams.get('sensor_id');
+    if (!sensorIdFromQuery) {
+      return;
+    }
+
+    const sensorExists = sensorList.some((sensor) => sensor.sensor_id === sensorIdFromQuery);
+    if (!sensorExists) {
+      return;
+    }
+
+    setActiveTab('logs');
+    updateGlobalActiveTab('logs');
+    setFilterSensorTypes([]);
+    setFilterSensorIds([sensorIdFromQuery]);
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('sensor_id');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, sensorList, setSearchParams, updateGlobalActiveTab]);
+
+  // When sensor types change, keep only valid sensor IDs and reset threat types.
+  useEffect(() => {
+    setFilterSensorIds((prev) => {
+      if (filterSensorTypes.length === 0) {
+        return prev;
+      }
+
+      return prev.filter((sensorId) =>
+        sensorList.some(
+          (sensor) => sensor.sensor_id === sensorId && filterSensorTypes.includes(sensor.sensor_type.toLowerCase())
+        )
+      );
+    });
+    const sensorIdFromQuery = searchParams.get('sensor_id');
+    if (!sensorIdFromQuery) {
+      return;
+    }
+
+    const sensorExists = sensorList.some((sensor) => sensor.sensor_id === sensorIdFromQuery);
+    if (!sensorExists) {
+      return;
+    }
+
+    setActiveTab('logs');
+    updateGlobalActiveTab('logs');
+    setFilterSensorTypes([]);
+    setFilterSensorIds([sensorIdFromQuery]);
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('sensor_id');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, sensorList, setSearchParams, updateGlobalActiveTab]);
+
+  // When sensor types change, keep only valid sensor IDs and reset threat types.
+  useEffect(() => {
+    setFilterSensorIds((prev) => {
+      if (filterSensorTypes.length === 0) {
+        return prev;
+      }
+
+      return prev.filter((sensorId) =>
+        sensorList.some(
+          (sensor) => sensor.sensor_id === sensorId && filterSensorTypes.includes(sensor.sensor_type.toLowerCase())
+        )
+      );
+    });
     setFilterThreatTypes([]);
     fetchAvailableThreatTypes(filterSensorTypes);
-  }, [filterSensorTypes, fetchAvailableThreatTypes]);
+  }, [filterSensorTypes, fetchAvailableThreatTypes, sensorList]);
+  }, [filterSensorTypes, fetchAvailableThreatTypes, sensorList]);
 
   // Initial load for Threat Logs
   useEffect(() => {
@@ -453,6 +525,22 @@ export function Threats() {
     setNextCursor(null);
     fetchThreatLogs(null, true);
   }, [filterTime, filterSensorTypes, filterSensorIds, filterThreatTypes, filterSeverities, fromDateTime, toDateTime]);
+
+  // Honor global tab requests (e.g., View All from notification bell) and refresh logs.
+  useEffect(() => {
+    if (globalActiveTab === 'logs' && activeTab !== 'logs') {
+      setActiveTab('logs');
+      fetchThreatLogs(null, true);
+    }
+  }, [globalActiveTab, activeTab, fetchThreatLogs]);
+
+  // Honor global tab requests (e.g., View All from notification bell) and refresh logs.
+  useEffect(() => {
+    if (globalActiveTab === 'logs' && activeTab !== 'logs') {
+      setActiveTab('logs');
+      fetchThreatLogs(null, true);
+    }
+  }, [globalActiveTab, activeTab, fetchThreatLogs]);
 
   // Handle Live Stream data - only show threats received after tab was opened
   useEffect(() => {

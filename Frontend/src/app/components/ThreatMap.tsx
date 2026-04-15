@@ -216,6 +216,7 @@ export function ThreatMap() {
       const sensorStateLabel = hasRecentThreat
         ? 'UNDER THREAT'
         : sensor.status?.toUpperCase() || 'UNKNOWN';
+      const encodedSensorId = encodeURIComponent(sensor.sensor_id);
 
       const icon = L.divIcon({
         className: 'sensor-map-icon',
@@ -271,10 +272,26 @@ export function ThreatMap() {
             </div>
             <div style="font-size: 13px; margin-bottom: 4px;"><strong>Type:</strong> ${sensor.sensor_type}</div>
             <div style="font-size: 13px; margin-bottom: 4px;"><strong>Location:</strong> ${sensor.location || 'Unknown'}</div>
-            <div style="font-size: 13px; margin-bottom: 4px;"><strong>Status:</strong> ${sensor.status?.toUpperCase() || 'UNKNOWN'}</div>
             <div style="font-size: 13px; margin-bottom: 4px;"><strong>Coverage:</strong> ${sensor.coverage_radius_m} m</div>
             <div style="font-size: 13px; margin-bottom: 4px;"><strong>Last alert:</strong> ${latestThreat ? formatRelativeTime(latestThreat.timestamp) : 'No recent activity'}</div>
             ${latestThreat ? `<div style="font-size: 13px;"><strong>Threat:</strong> ${latestThreat.threat_type} · ${latestThreat.severity.toUpperCase()}</div>` : ''}
+            <div style="margin-top: 12px;">
+              <a
+                href="/threats?sensor_id=${encodedSensorId}"
+                style="
+                  display: inline-block;
+                  text-decoration: none;
+                  font-size: 12px;
+                  font-weight: 700;
+                  letter-spacing: 0.04em;
+                  color: #0369A1;
+                  background: rgba(2, 132, 199, 0.1);
+                  border: 1px solid rgba(2, 132, 199, 0.24);
+                  border-radius: 9999px;
+                  padding: 6px 10px;
+                "
+              >Show threat history</a>
+            </div>
           </div>
         `,
         { closeButton: true, autoClose: false, closeOnClick: false }

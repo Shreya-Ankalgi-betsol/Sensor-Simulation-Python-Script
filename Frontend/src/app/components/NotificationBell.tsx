@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Bell, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { ThreatLog } from '../types/api';
+import { useActiveTab } from '../context/ActiveTabContext';
 
 interface Notification {
   id: string;
@@ -25,6 +26,7 @@ export function NotificationBell({
   clearOnMarkAllRead = false,
 }: NotificationBellProps) {
   const navigate = useNavigate();
+  const { setActiveTab } = useActiveTab();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showPanel, setShowPanel] = useState(false);
   const [toasts, setToasts] = useState<Notification[]>([]);
@@ -337,6 +339,7 @@ export function NotificationBell({
                 <button
                   onClick={() => {
                     setShowPanel(false);
+                    setActiveTab('logs');
                     navigate('/threats');
                   }}
                   className="w-full py-2.5 rounded-full transition-all duration-200"
