@@ -251,10 +251,8 @@ const ThreatTable = ({
 
 export function Threats() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { sensorList } = useSensors();
   const { liveThreats, isConnected, connectionStatus } = useWebSocket();
-  const { activeTab: globalActiveTab, setActiveTab: updateGlobalActiveTab } = useActiveTab();
   const { activeTab: globalActiveTab, setActiveTab: updateGlobalActiveTab } = useActiveTab();
   const { timezone } = useTimezone();
   
@@ -442,41 +440,7 @@ export function Threats() {
   }, [fetchAvailableThreatTypes]);
 
   // Prefill sensor filter from query param: /threats?sensor_id=RADAR-1
-  // Prefill sensor filter from query param: /threats?sensor_id=RADAR-1
   useEffect(() => {
-    const sensorIdFromQuery = searchParams.get('sensor_id');
-    if (!sensorIdFromQuery) {
-      return;
-    }
-
-    const sensorExists = sensorList.some((sensor) => sensor.sensor_id === sensorIdFromQuery);
-    if (!sensorExists) {
-      return;
-    }
-
-    setActiveTab('logs');
-    updateGlobalActiveTab('logs');
-    setFilterSensorTypes([]);
-    setFilterSensorIds([sensorIdFromQuery]);
-
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.delete('sensor_id');
-    setSearchParams(nextParams, { replace: true });
-  }, [searchParams, sensorList, setSearchParams, updateGlobalActiveTab]);
-
-  // When sensor types change, keep only valid sensor IDs and reset threat types.
-  useEffect(() => {
-    setFilterSensorIds((prev) => {
-      if (filterSensorTypes.length === 0) {
-        return prev;
-      }
-
-      return prev.filter((sensorId) =>
-        sensorList.some(
-          (sensor) => sensor.sensor_id === sensorId && filterSensorTypes.includes(sensor.sensor_type.toLowerCase())
-        )
-      );
-    });
     const sensorIdFromQuery = searchParams.get('sensor_id');
     if (!sensorIdFromQuery) {
       return;
@@ -513,7 +477,6 @@ export function Threats() {
     setFilterThreatTypes([]);
     fetchAvailableThreatTypes(filterSensorTypes);
   }, [filterSensorTypes, fetchAvailableThreatTypes, sensorList]);
-  }, [filterSensorTypes, fetchAvailableThreatTypes, sensorList]);
 
   // Initial load for Threat Logs
   useEffect(() => {
@@ -525,14 +488,6 @@ export function Threats() {
     setNextCursor(null);
     fetchThreatLogs(null, true);
   }, [filterTime, filterSensorTypes, filterSensorIds, filterThreatTypes, filterSeverities, fromDateTime, toDateTime]);
-
-  // Honor global tab requests (e.g., View All from notification bell) and refresh logs.
-  useEffect(() => {
-    if (globalActiveTab === 'logs' && activeTab !== 'logs') {
-      setActiveTab('logs');
-      fetchThreatLogs(null, true);
-    }
-  }, [globalActiveTab, activeTab, fetchThreatLogs]);
 
   // Honor global tab requests (e.g., View All from notification bell) and refresh logs.
   useEffect(() => {
