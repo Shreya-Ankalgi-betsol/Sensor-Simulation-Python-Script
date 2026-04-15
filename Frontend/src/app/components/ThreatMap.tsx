@@ -3,16 +3,21 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSensors } from '../context/SensorContext';
 import { useWebSocket } from '../context/WebSocketContext';
+import { useMapNavigation } from '../context/MapNavigationContext';
 import { ThreatLog } from '../types/api';
 
 export function ThreatMap() {
   const { sensorList } = useSensors();
   const { liveThreats } = useWebSocket();
+  const { zoomTarget, setZoomTarget } = useMapNavigation();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const sensorLayerRef = useRef<L.LayerGroup | null>(null);
   const threatLayerRef = useRef<L.LayerGroup | null>(null);
+  const lastSensorLayoutKeyRef = useRef<string>('');
   const activeWindowMs = 2 * 60 * 1000;
+  const threatPointWindowMs = 8 * 1000;
+  const threatFutureToleranceMs = 15 * 1000;
 
   const latestThreatBySensor = useMemo(() => {
     const threatMap = new Map<string, ThreatLog>();
@@ -136,10 +141,12 @@ export function ThreatMap() {
     const map = L.map(mapContainerRef.current, {
       zoomControl: true,
       preferCanvas: true,
+      maxZoom: 22,
     }).setView(defaultCenter, 12);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
+      maxZoom: 22,
+      maxNativeZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
 
@@ -175,9 +182,16 @@ export function ThreatMap() {
     const validSensors = sensorList.filter((sensor) => Number.isFinite(sensor.lat) && Number.isFinite(sensor.lng));
 
     if (validSensors.length === 0) {
+      lastSensorLayoutKeyRef.current = '';
       map.setView(defaultCenter, 12);
       return;
     }
+
+    const sensorLayoutKey = validSensors
+      .map((sensor) => `${sensor.sensor_id}:${sensor.lat.toFixed(6)}:${sensor.lng.toFixed(6)}`)
+      .sort()
+      .join('|');
+    const shouldAutoFrame = sensorLayoutKey !== lastSensorLayoutKeyRef.current;
 
     const bounds = L.latLngBounds([]);
     const coordinateGroups = new Map<string, number>();
@@ -202,6 +216,7 @@ export function ThreatMap() {
       const sensorStateLabel = hasRecentThreat
         ? 'UNDER THREAT'
         : sensor.status?.toUpperCase() || 'UNKNOWN';
+      const encodedSensorId = encodeURIComponent(sensor.sensor_id);
 
       const icon = L.divIcon({
         className: 'sensor-map-icon',
@@ -257,10 +272,26 @@ export function ThreatMap() {
             </div>
             <div style="font-size: 13px; margin-bottom: 4px;"><strong>Type:</strong> ${sensor.sensor_type}</div>
             <div style="font-size: 13px; margin-bottom: 4px;"><strong>Location:</strong> ${sensor.location || 'Unknown'}</div>
-            <div style="font-size: 13px; margin-bottom: 4px;"><strong>Status:</strong> ${sensor.status?.toUpperCase() || 'UNKNOWN'}</div>
             <div style="font-size: 13px; margin-bottom: 4px;"><strong>Coverage:</strong> ${sensor.coverage_radius_m} m</div>
             <div style="font-size: 13px; margin-bottom: 4px;"><strong>Last alert:</strong> ${latestThreat ? formatRelativeTime(latestThreat.timestamp) : 'No recent activity'}</div>
             ${latestThreat ? `<div style="font-size: 13px;"><strong>Threat:</strong> ${latestThreat.threat_type} · ${latestThreat.severity.toUpperCase()}</div>` : ''}
+            <div style="margin-top: 12px;">
+              <a
+                href="/threats?sensor_id=${encodedSensorId}"
+                style="
+                  display: inline-block;
+                  text-decoration: none;
+                  font-size: 12px;
+                  font-weight: 700;
+                  letter-spacing: 0.04em;
+                  color: #0369A1;
+                  background: rgba(2, 132, 199, 0.1);
+                  border: 1px solid rgba(2, 132, 199, 0.24);
+                  border-radius: 9999px;
+                  padding: 6px 10px;
+                "
+              >Show threat history</a>
+            </div>
           </div>
         `,
         { closeButton: true, autoClose: false, closeOnClick: false }
@@ -288,8 +319,14 @@ export function ThreatMap() {
       bounds.extend(displayPosition);
     });
 
+    if (!shouldAutoFrame) {
+      return;
+    }
+
+    lastSensorLayoutKeyRef.current = sensorLayoutKey;
+
     if (validSensors.length === 1) {
-      map.setView([validSensors[0].lat, validSensors[0].lng], 15);
+      map.setView([validSensors[0].lat, validSensors[0].lng], 18);
       return;
     }
 
@@ -300,6 +337,7 @@ export function ThreatMap() {
     });
   }, [sensorList, defaultCenter, latestThreatBySensor]);
 
+  // Render threat points on the map
   useEffect(() => {
     const threatLayer = threatLayerRef.current;
     if (!threatLayer) {
@@ -341,11 +379,16 @@ export function ThreatMap() {
       } else if (sensor) {
         point = [sensor.lat, sensor.lng];
       }
-    }
+      const ageMs = now - threatTimeMs;
+      return ageMs >= -threatFutureToleranceMs && ageMs <= threatPointWindowMs;
+    });
 
-    if (!point) {
-      return;
-    }
+    recentThreats.forEach((threat) => {
+      const ageMs = Math.max(0, now - new Date(threat.timestamp).getTime());
+      const normalizedAge = Math.min(1, Math.max(0, ageMs / threatPointWindowMs));
+      const fillOpacity = 0.95 - normalizedAge * 0.75;
+      const strokeOpacity = 0.85 - normalizedAge * 0.65;
+      const radius = 5 - normalizedAge * 2.2;
 
     L.circleMarker(point, {
       radius: 10,
@@ -355,7 +398,57 @@ export function ThreatMap() {
       fillOpacity: 0.95,
     }).addTo(threatLayer);
 
-  }, [liveThreats, sensorList]);
+      if (Number.isFinite(latFromPayload) && Number.isFinite(lngFromPayload)) {
+        point = [latFromPayload, lngFromPayload];
+      } else {
+        const sensor = sensorById.get(threat.sensor_id);
+        const rangeM = Number(threat.object_range_m);
+        const bearingDeg = Number(threat.object_bearing_deg);
+
+        if (
+          sensor &&
+          Number.isFinite(rangeM) &&
+          Number.isFinite(bearingDeg)
+        ) {
+          point = destinationFromSensor(sensor.lat, sensor.lng, rangeM, bearingDeg);
+        } else if (sensor) {
+          point = [sensor.lat, sensor.lng];
+        }
+      }
+
+      if (!point) {
+        return;
+      }
+
+      L.circleMarker(point, {
+        radius: Math.max(2.5, radius),
+        color: `rgba(127, 29, 29, ${Math.max(0.2, strokeOpacity).toFixed(3)})`,
+        weight: 1,
+        fillColor: '#DC2626',
+        fillOpacity: Math.max(0.15, fillOpacity),
+      }).addTo(threatLayer);
+    });
+  }, [liveThreats, sensorList, threatFutureToleranceMs]);
+
+  // Handle zoom to specific sensor
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !zoomTarget) {
+      return;
+    }
+
+    // Zoom to the target sensor with a default zoom level of 16
+    const zoomLevel = zoomTarget.zoomLevel || 16;
+    map.setView([zoomTarget.lat, zoomTarget.lng], zoomLevel, {
+      animate: true,
+      duration: 0.6,
+    });
+
+    // Clear the zoom target after zooming
+    setTimeout(() => {
+      setZoomTarget(null);
+    }, 700);
+  }, [zoomTarget, setZoomTarget]);
 
   return (
     <div

@@ -1,51 +1,260 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router";
+import type { Ref } from "react";
+
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { RotateCcw } from "lucide-react";
 import { useWebSocket } from '../context/WebSocketContext'
+import { useActiveTab } from '../context/ActiveTabContext';
+import { useTimezone } from '../context/TimezoneContext';
 import { useSensors } from "../context/SensorContext";
 import { apiGet, APIError } from '../services/apiClient';
 import { ThreatLog, ThreatSummaryOut, PagedThreats } from '../types/api';
 import HeadlessUIDropdown from '../components/HeadlessUIDropdown';
-
-// Common IANA timezones
-const COMMON_TIMEZONES = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Anchorage',
-  'Pacific/Honolulu',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Moscow',
-  'Asia/Dubai',
-  'Asia/Kolkata',
-  'Asia/Bangkok',
-  'Asia/Shanghai',
-  'Asia/Hong_Kong',
-  'Asia/Tokyo',
-  'Asia/Seoul',
-  'Australia/Sydney',
-  'Australia/Melbourne',
-  'Australia/Perth',
-  'Pacific/Auckland',
-  'Pacific/Fiji',
-  'Africa/Cairo',
-  'Africa/Johannesburg',
-  'America/Toronto',
-  'America/Mexico_City',
-  'America/Buenos_Aires',
-  'America/Sao_Paulo',
-];
+import CheckboxGroup from '../components/CheckboxGroup';
+import { NotificationBell } from '../components/NotificationBell';
 
 type ActiveTab = 'live' | 'logs';
 
+type ThreatTableProps = {
+  threats: ThreatLog[];
+  loading: boolean;
+  isLiveTab: boolean;
+  scrollRef?: Ref<HTMLDivElement>;
+  timezoneLabel: string;
+  formatTimestamp: (utcTimestamp: string, tz?: string) => string;
+  getSeverityColor: (severity: string) => string;
+  getSeverityBgColor: (severity: string) => string;
+  sensorList: Array<{ sensor_id: string; location?: string }>;
+  logLoadingMore?: boolean;
+  hasMore?: boolean;
+};
+
+const ThreatTable = ({
+  threats,
+  loading,
+  isLiveTab,
+  scrollRef,
+  timezoneLabel,
+  formatTimestamp,
+  getSeverityColor,
+  getSeverityBgColor,
+  sensorList,
+  logLoadingMore = false,
+  hasMore = true,
+}: ThreatTableProps) => (
+  <div
+    className="rounded-2xl overflow-hidden shadow-sm"
+    style={{
+      background: 'rgba(255,255,255,0.94)',
+      border: '1px solid rgba(226,232,240,0.9)',
+    }}
+  >
+    <div
+      ref={scrollRef}
+      className="threat-table-container overflow-auto"
+      style={{
+        maxHeight: "calc(100vh - 340px)",
+        overflowY: "auto",
+        scrollbarWidth: "thin",
+        scrollbarColor: "#CBD5E1 #F1F5F9",
+      }}
+    >
+      <style>
+        {`
+            .threat-table-container::-webkit-scrollbar {
+              width: 8px;
+            }
+            .threat-table-container::-webkit-scrollbar-track {
+              background: #F1F5F9;
+            }
+            .threat-table-container::-webkit-scrollbar-thumb {
+              background: #CBD5E1;
+              border-radius: 4px;
+            }
+            .threat-table-container::-webkit-scrollbar-thumb:hover {
+              background: #94A3B8;
+            }
+          `}
+      </style>
+      <table className="w-full">
+        <thead>
+          <tr
+            style={{
+              background: 'rgba(248,250,252,0.95)',
+              borderBottom: '1px solid rgba(226,232,240,0.9)',
+            }}
+          >
+            {[
+              `Time (${timezoneLabel})`,
+              "Threat",
+              "Sensor ID",
+              "Sensor Type",
+              "Location",
+              "Severity",
+            ].map((header) => (
+              <th
+                key={header}
+                className="px-4 py-3 text-left uppercase tracking-wider"
+                style={{
+                  fontSize: "0.865rem",
+                  fontWeight: 600,
+                  color: "var(--text-secondary)",
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {threats.length === 0 && !loading ? (
+            <tr>
+              <td colSpan={6} className="px-4 py-8 text-center">
+                <div
+                  style={{
+                    fontSize: "1rem",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  {isLiveTab
+                    ? "No live threats received yet. Waiting for data..."
+                    : "No threats found matching the current filters."}
+                </div>
+              </td>
+            </tr>
+          ) : (
+            threats.map((threat, index) => (
+              <tr
+                key={threat.alert_id}
+                className="border-b transition-all duration-200"
+                style={{
+                  background:
+                    index % 2 === 0 ? "var(--bg-card)" : "var(--bg-table-alt)",
+                  borderColor: "var(--border-color)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "var(--bg-hover)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background =
+                    index % 2 === 0 ? "var(--bg-card)" : "var(--bg-table-alt)";
+                }}
+              >
+                <td
+                  className="px-4 py-3"
+                  style={{
+                    fontSize: "0.865rem",
+                    color: "var(--text-secondary)",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  {formatTimestamp(threat.timestamp, timezoneLabel)}
+                </td>
+                <td
+                  className="px-4 py-3"
+                  style={{
+                    fontSize: "1.00625rem",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  {threat.threat_type}
+                </td>
+                <td
+                  className="px-4 py-3"
+                  style={{
+                    fontSize: "1.00625rem",
+                    color: "var(--text-primary)",
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  {threat.sensor_id}
+                </td>
+                <td
+                  className="px-4 py-3"
+                  style={{
+                    fontSize: "1.00625rem",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  {threat.sensor_type}
+                </td>
+                <td
+                  className="px-4 py-3"
+                  style={{
+                    fontSize: "1.00625rem",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  {sensorList.find((s) => s.sensor_id === threat.sensor_id)
+                    ?.location || "Unknown"}
+                </td>
+                <td className="px-4 py-3">
+                  <span
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded-full"
+                    style={{
+                      background: getSeverityBgColor(threat.severity),
+                      color: getSeverityColor(threat.severity),
+                      fontSize: "0.865rem",
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full"
+                      style={{
+                        background: getSeverityColor(threat.severity),
+                      }}
+                    />
+                    {threat.severity}
+                  </span>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+
+      {/* Loading More Indicator - Logs tab only */}
+      {!isLiveTab && logLoadingMore && (
+        <div
+          className="px-4 py-6 text-center border-t"
+          style={{ borderColor: 'var(--border-color)' }}
+        >
+          <div className="flex items-center justify-center gap-2">
+            <div
+              className="inline-block animate-spin rounded-full h-5 w-5 border-b-2"
+              style={{ borderColor: '#0284C7' }}
+            />
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+              Loading more threats...
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* End of List Indicator */}
+      {!isLiveTab && !hasMore && threats.length > 0 && (
+        <div
+          className="px-4 py-6 text-center border-t"
+          style={{ borderColor: 'var(--border-color)' }}
+        >
+          <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+            End of threat log
+          </span>
+        </div>
+      )}
+    </div>
+  </div>
+);
+
 export function Threats() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { sensorList } = useSensors();
   const { liveThreats, isConnected, connectionStatus } = useWebSocket();
+  const { activeTab: globalActiveTab, setActiveTab: updateGlobalActiveTab } = useActiveTab();
+  const { timezone } = useTimezone();
   
   // Tab management
   const [activeTab, setActiveTab] = useState<ActiveTab>('live');
@@ -65,13 +274,12 @@ export function Threats() {
   const [logLoadingMore, setLogLoadingMore] = useState(false);
   
   const [filterTime, setFilterTime] = useState("All");
-  const [filterSensorType, setFilterSensorType] = useState("All");
-  const [filterSensorId, setFilterSensorId] = useState("All");
-  const [filterThreatType, setFilterThreatType] = useState("All");
-  const [filterSeverity, setFilterSeverity] = useState("All");
+  const [filterSensorTypes, setFilterSensorTypes] = useState<string[]>([]);
+  const [filterSensorIds, setFilterSensorIds] = useState<string[]>([]);
+  const [filterThreatTypes, setFilterThreatTypes] = useState<string[]>([]);
+  const [filterSeverities, setFilterSeverities] = useState<string[]>([]);
   const [fromDateTime, setFromDateTime] = useState<Date | null>(null)
   const [toDateTime, setToDateTime] = useState<Date | null>(null)
-  const [timezone, setTimezone] = useState<string>('UTC');
   const [availableThreatTypes, setAvailableThreatTypes] = useState<string[]>([]);
   
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +290,6 @@ export function Threats() {
   const scrollPositionRef = useRef<number>(0);
   const prevThreatCountRef = useRef<number>(0);
   const shouldRestoreScrollRef = useRef<boolean>(false);
-  const isUpdatingFromSensorIdRef = useRef<boolean>(false);
   
   // Refs to maintain fresh state values in scroll listener without re-attaching
   const paginationStateRef = useRef({ 
@@ -150,15 +357,15 @@ export function Threats() {
   };
 
   // Fetch all available threat types (independent of filters, or filtered by sensor type)
-  const fetchAvailableThreatTypes = useCallback(async (sensorType: string = "All") => {
+  const fetchAvailableThreatTypes = useCallback(async (sensorTypes: string[] = []) => {
     try {
       const params = new URLSearchParams();
       params.append("page_size", "1000"); // Get more threats to extract unique types
       
-      // If a specific sensor type is selected, filter by it
-      if (sensorType !== "All") {
-        params.append("sensor_type", sensorType.toLowerCase());
-      }
+      // If specific sensor types are selected, filter by them
+      sensorTypes.forEach(type => {
+        params.append("sensor_type", type.toLowerCase());
+      });
       
       const url = `/api/v1/threats?${params.toString()}`;
       const pagedThreats = await apiGet<PagedThreats>(url);
@@ -181,10 +388,11 @@ export function Threats() {
 
       const params = new URLSearchParams();
       
-      if (filterSensorType !== "All") params.append("sensor_type", filterSensorType.toLowerCase());
-      if (filterSensorId !== "All") params.append("sensor_id", filterSensorId);
-      if (filterSeverity !== "All") params.append("severity", filterSeverity);
-      if (filterThreatType !== "All") params.append("threat_type", filterThreatType);
+      // Build repeated query params for multi-select
+      filterSensorTypes.forEach(t => params.append("sensor_type", t.toLowerCase()));
+      filterSensorIds.forEach(id => params.append("sensor_id", id));
+      filterSeverities.forEach(s => params.append("severity", s));
+      filterThreatTypes.forEach(t => params.append("threat_type", t));
       
       const { from_dt, to_dt } = calculateDateRange();
       if (from_dt) params.append("from_dt", from_dt);
@@ -219,7 +427,7 @@ export function Threats() {
       if (isInitial) setLogLoading(false);
       else setLogLoadingMore(false);
     }
-  }, [filterSensorType, filterSensorId, filterSeverity, filterThreatType, filterTime, fromDateTime, toDateTime]);
+  }, [filterSensorTypes, filterSensorIds, filterSeverities, filterThreatTypes, filterTime, fromDateTime, toDateTime]);
 
   // Clear initial loading state on mount
   useEffect(() => {
@@ -231,37 +439,63 @@ export function Threats() {
     fetchAvailableThreatTypes();
   }, [fetchAvailableThreatTypes]);
 
-  // When sensor type changes, reset sensor ID and threat type, then fetch filtered threat types
+  // Prefill sensor filter from query param: /threats?sensor_id=RADAR-1
   useEffect(() => {
-    // Only reset sensor ID if this change came from direct user action, not from sensor ID selection
-    if (!isUpdatingFromSensorIdRef.current) {
-      setFilterSensorId("All");
+    const sensorIdFromQuery = searchParams.get('sensor_id');
+    if (!sensorIdFromQuery) {
+      return;
     }
-    setFilterThreatType("All");
-    fetchAvailableThreatTypes(filterSensorType);
-    isUpdatingFromSensorIdRef.current = false;
-  }, [filterSensorType, fetchAvailableThreatTypes]);
 
-  // When sensor ID changes, update sensor type to match
-  useEffect(() => {
-    if (filterSensorId !== "All") {
-      const selectedSensor = sensorList.find(s => s.sensor_id === filterSensorId);
-      if (selectedSensor && selectedSensor.sensor_type !== filterSensorType) {
-        isUpdatingFromSensorIdRef.current = true;
-        setFilterSensorType(selectedSensor.sensor_type);
-      }
+    const sensorExists = sensorList.some((sensor) => sensor.sensor_id === sensorIdFromQuery);
+    if (!sensorExists) {
+      return;
     }
-  }, [filterSensorId, sensorList, filterSensorType]);
+
+    setActiveTab('logs');
+    updateGlobalActiveTab('logs');
+    setFilterSensorTypes([]);
+    setFilterSensorIds([sensorIdFromQuery]);
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('sensor_id');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, sensorList, setSearchParams, updateGlobalActiveTab]);
+
+  // When sensor types change, keep only valid sensor IDs and reset threat types.
+  useEffect(() => {
+    setFilterSensorIds((prev) => {
+      if (filterSensorTypes.length === 0) {
+        return prev;
+      }
+
+      return prev.filter((sensorId) =>
+        sensorList.some(
+          (sensor) => sensor.sensor_id === sensorId && filterSensorTypes.includes(sensor.sensor_type.toLowerCase())
+        )
+      );
+    });
+    setFilterThreatTypes([]);
+    fetchAvailableThreatTypes(filterSensorTypes);
+  }, [filterSensorTypes, fetchAvailableThreatTypes, sensorList]);
 
   // Initial load for Threat Logs
   useEffect(() => {
     fetchThreatLogs(null, true);
   }, []);
 
-  // Refetch logs when filters change
+  // Refetch logs when filters change - reset cursor to load from beginning
   useEffect(() => {
+    setNextCursor(null);
     fetchThreatLogs(null, true);
-  }, [filterTime, filterSensorType, filterSensorId, filterThreatType, filterSeverity, fromDateTime, toDateTime]);
+  }, [filterTime, filterSensorTypes, filterSensorIds, filterThreatTypes, filterSeverities, fromDateTime, toDateTime]);
+
+  // Honor global tab requests (e.g., View All from notification bell) and refresh logs.
+  useEffect(() => {
+    if (globalActiveTab === 'logs' && activeTab !== 'logs') {
+      setActiveTab('logs');
+      fetchThreatLogs(null, true);
+    }
+  }, [globalActiveTab, activeTab, fetchThreatLogs]);
 
   // Handle Live Stream data - only show threats received after tab was opened
   useEffect(() => {
@@ -305,6 +539,7 @@ export function Threats() {
   // Handle tab change
   const handleTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
+    updateGlobalActiveTab(tab);
     
     // When switching TO live tab, auto-start streaming (not paused)
     if (tab === 'live') {
@@ -350,7 +585,7 @@ export function Threats() {
   }, [logThreats.length]);
 
   // Restore scroll position after new data is loaded during pagination
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = logTableContainerRef.current;
     if (!container || activeTab !== 'logs' || !shouldRestoreScrollRef.current) return;
 
@@ -421,23 +656,23 @@ export function Threats() {
 
   const resetFilters = () => {
     setFilterTime("All");
-    setFilterSensorType("All");
-    setFilterSensorId("All");
-    setFilterThreatType("All");
-    setFilterSeverity("All");
+    setFilterSensorTypes([]);
+    setFilterSensorIds([]);
+    setFilterThreatTypes([]);
+    setFilterSeverities([]);
     setFromDateTime(null)
     setToDateTime(null)
   };
 
-  // Compute filtered sensor IDs based on selected sensor type
-  const filteredSensorIds = filterSensorType === "All" 
+  // Compute available sensor IDs based on selected sensor types
+  const filteredSensorIds = filterSensorTypes.length === 0
     ? sensorList.map(s => s.sensor_id)
-    : sensorList.filter(s => s.sensor_type.toLowerCase() === filterSensorType.toLowerCase()).map(s => s.sensor_id);
+    : sensorList.filter(s => filterSensorTypes.includes(s.sensor_type.toLowerCase())).map(s => s.sensor_id);
 
-  // Compute filtered sensors based on selected sensor type
-  const filteredSensors = filterSensorType === "All"
+  // Compute available sensors based on selected sensor types
+  const filteredSensors = filterSensorTypes.length === 0
     ? sensorList
-    : sensorList.filter(s => s.sensor_type.toLowerCase() === filterSensorType.toLowerCase());
+    : sensorList.filter(s => filterSensorTypes.includes(s.sensor_type.toLowerCase()));
 
   // Calculate active sensor count from sensor list
   const activeSensorCount = sensorList.filter(s => s.status === 'active').length;
@@ -453,214 +688,6 @@ export function Threats() {
     active: threatLogSummary?.active_sensor_count ?? 0,
   };
 
-  const ThreatTable = ({ 
-    threats, 
-    loading, 
-    isLiveTab,
-    onScroll 
-  }: { 
-    threats: ThreatLog[], 
-    loading: boolean,
-    isLiveTab: boolean,
-    onScroll?: React.Ref<HTMLDivElement>,
-  }) => (
-      <div
-        className="rounded-2xl overflow-hidden shadow-sm"
-        style={{
-          background: 'rgba(255,255,255,0.94)',
-          border: '1px solid rgba(226,232,240,0.9)',
-        }}
-    >
-      <div 
-        ref={onScroll}
-        className="threat-table-container overflow-auto"
-        style={{
-          maxHeight: "calc(100vh - 340px)",
-          overflowY: "auto",
-          scrollbarWidth: "thin",
-          scrollbarColor: "#CBD5E1 #F1F5F9",
-        }}
-      >
-        <style>
-          {`
-            .threat-table-container::-webkit-scrollbar {
-              width: 8px;
-            }
-            .threat-table-container::-webkit-scrollbar-track {
-              background: #F1F5F9;
-            }
-            .threat-table-container::-webkit-scrollbar-thumb {
-              background: #CBD5E1;
-              border-radius: 4px;
-            }
-            .threat-table-container::-webkit-scrollbar-thumb:hover {
-              background: #94A3B8;
-            }
-          `}
-        </style>
-        <table className="w-full">
-          <thead>
-            <tr
-              style={{
-                    background: 'rgba(248,250,252,0.95)',
-                    borderBottom: '1px solid rgba(226,232,240,0.9)',
-              }}
-            >
-              {[
-                "Time",
-                "Threat",
-                "Sensor ID",
-                "Sensor Type",
-                "Location",
-                "Severity",
-              ].map((header) => (
-                <th
-                  key={header}
-                  className="px-4 py-3 text-left uppercase tracking-wider"
-                  style={{
-                    fontSize: "0.865rem",
-                    fontWeight: 600,
-                    color: "var(--text-secondary)",
-                    fontFamily: "var(--font-mono)",
-                  }}
-                >
-                  {header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {threats.length === 0 && !loading ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center">
-                  <div style={{
-                    fontSize: "1rem",
-                    color: "var(--text-secondary)",
-                  }}>
-                    {isLiveTab ? "No live threats received yet. Waiting for data..." : "No threats found matching the current filters."}
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              threats.map((threat, index) => (
-                <tr
-                  key={threat.alert_id}
-                  className="border-b transition-all duration-200"
-                  style={{
-                    background:
-                      index % 2 === 0
-                        ? "var(--bg-card)"
-                        : "var(--bg-table-alt)",
-                    borderColor: "var(--border-color)",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "var(--bg-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background =
-                      index % 2 === 0
-                        ? "var(--bg-card)"
-                        : "var(--bg-table-alt)";
-                  }}
-                >
-                  <td
-                    className="px-4 py-3"
-                    style={{
-                      fontSize: "0.865rem",
-                      color: "var(--text-secondary)",
-                      fontFamily: "var(--font-mono)",
-                    }}
-                  >
-                    {formatTimestampInTimezone(threat.timestamp, activeTab === 'live' ? 'UTC' : timezone)}
-                  </td>
-                  <td
-                    className="px-4 py-3"
-                    style={{
-                      fontSize: "1.00625rem",
-                      color: "var(--text-primary)",
-                    }}
-                  >
-                    {threat.threat_type}
-                  </td>
-                  <td
-                    className="px-4 py-3"
-                    style={{
-                      fontSize: "1.00625rem",
-                      color: "var(--text-primary)",
-                      fontFamily: "var(--font-mono)",
-                    }}
-                  >
-                    {threat.sensor_id}
-                  </td>
-                  <td
-                    className="px-4 py-3"
-                    style={{
-                      fontSize: "1.00625rem",
-                      color: "var(--text-primary)",
-                    }}
-                  >
-                    {threat.sensor_type}
-                  </td>
-                  <td
-                    className="px-4 py-3"
-                    style={{
-                      fontSize: "1.00625rem",
-                      color: "var(--text-primary)",
-                    }}
-                  >
-                    {sensorList.find(s => s.sensor_id === threat.sensor_id)?.location || "Unknown"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="inline-flex items-center gap-2 px-3 py-1 rounded-full"
-                      style={{
-                        background: getSeverityBgColor(threat.severity),
-                        color: getSeverityColor(threat.severity),
-                        fontSize: "0.865rem",
-                        fontWeight: 600,
-                      }}
-                    >
-                      <span
-                        className="w-2 h-2 rounded-full"
-                        style={{
-                          background: getSeverityColor(threat.severity),
-                        }}
-                      />
-                      {threat.severity}
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        
-        {/* Loading More Indicator - Logs tab only */}
-        {!activeTab && logLoadingMore && (
-          <div className="px-4 py-6 text-center border-t" style={{ borderColor: 'var(--border-color)' }}>
-            <div className="flex items-center justify-center gap-2">
-              <div
-                className="inline-block animate-spin rounded-full h-5 w-5 border-b-2"
-                style={{ borderColor: '#0284C7' }}
-              />
-              <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                Loading more threats...
-              </span>
-            </div>
-          </div>
-        )}
-        
-        {/* End of List Indicator */}
-        {!hasMore && logThreats.length > 0 && !activeTab && (
-          <div className="px-4 py-6 text-center border-t" style={{ borderColor: 'var(--border-color)' }}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-              End of threat log
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
 
   return (
     <>
@@ -768,6 +795,14 @@ export function Threats() {
 
         {!loading && !error && (
           <>
+            {activeTab === 'logs' && (
+              <NotificationBell
+                liveThreats={liveThreats}
+                enableToasts={false}
+                clearOnMarkAllRead
+              />
+            )}
+
             {/* Page Header with Tabs */}
             <div>
               <div className="flex items-start justify-between gap-4">
@@ -1057,7 +1092,12 @@ export function Threats() {
                   threats={liveStreamThreats}
                   loading={false}
                   isLiveTab={true}
-                  onScroll={liveTableContainerRef}
+                  scrollRef={liveTableContainerRef}
+                  timezoneLabel={timezone}
+                  formatTimestamp={formatTimestampInTimezone}
+                  getSeverityColor={getSeverityColor}
+                  getSeverityBgColor={getSeverityBgColor}
+                  sensorList={sensorList}
                 />
               </>
             )}
@@ -1093,75 +1133,54 @@ export function Threats() {
 
                       {/* Sensor Type */}
                       <div className="flex-1 min-w-[150px]">
-                        <HeadlessUIDropdown
-                          value={filterSensorType}
-                          onChange={setFilterSensorType}
+                        <CheckboxGroup
+                          label="Sensor Type"
                           options={[
-                            { value: "All", label: "All" },
                             { value: "radar", label: "Radar" },
                             { value: "lidar", label: "Lidar" },
                           ]}
-                          label="Sensor Type"
+                          selected={filterSensorTypes}
+                          onChange={setFilterSensorTypes}
                         />
                       </div>
 
                       {/* Sensor ID */}
                       <div className="flex-1 min-w-[150px]">
-                        <HeadlessUIDropdown
-                          value={filterSensorId}
-                          onChange={setFilterSensorId}
-                          options={[
-                            { value: "All", label: "All" },
-                            ...filteredSensors.map((sensor) => ({
-                              value: sensor.sensor_id,
-                              label: sensor.sensor_id,
-                            })),
-                          ]}
+                        <CheckboxGroup
                           label="Sensor ID"
+                          options={filteredSensors.map((sensor) => ({
+                            value: sensor.sensor_id,
+                            label: sensor.sensor_id,
+                          }))}
+                          selected={filterSensorIds}
+                          onChange={setFilterSensorIds}
                         />
                       </div>
 
                       {/* Threat Type */}
                       <div className="flex-1 min-w-[150px]">
-                        <HeadlessUIDropdown
-                          value={filterThreatType}
-                          onChange={setFilterThreatType}
-                          options={[
-                            { value: "All", label: "All" },
-                            ...availableThreatTypes.map((threatType) => ({
-                              value: threatType,
-                              label: threatType,
-                            })),
-                          ]}
+                        <CheckboxGroup
                           label="Threat Type"
+                          options={availableThreatTypes.map((threatType) => ({
+                            value: threatType,
+                            label: threatType,
+                          }))}
+                          selected={filterThreatTypes}
+                          onChange={setFilterThreatTypes}
                         />
                       </div>
 
                       {/* Severity */}
                       <div className="flex-1 min-w-[150px]">
-                        <HeadlessUIDropdown
-                          value={filterSeverity}
-                          onChange={setFilterSeverity}
+                        <CheckboxGroup
+                          label="Severity"
                           options={[
-                            { value: "All", label: "All" },
                             { value: "high", label: "High" },
                             { value: "med", label: "Medium" },
                             { value: "low", label: "Low" },
                           ]}
-                          label="Severity"
-                        />
-                      </div>
-
-                      {/* Timezone */}
-                      <div className="flex-1 min-w-[150px]">
-                        <HeadlessUIDropdown
-                          value={timezone}
-                          onChange={setTimezone}
-                          options={COMMON_TIMEZONES.map((tz) => ({
-                            value: tz,
-                            label: tz,
-                          }))}
-                          label="Timezone"
+                          selected={filterSeverities}
+                          onChange={setFilterSeverities}
                         />
                       </div>
 
@@ -1293,7 +1312,14 @@ export function Threats() {
                   threats={logThreats}
                   loading={logLoading}
                   isLiveTab={false}
-                  onScroll={logTableContainerRef}
+                  scrollRef={logTableContainerRef}
+                  timezoneLabel={timezone}
+                  formatTimestamp={formatTimestampInTimezone}
+                  getSeverityColor={getSeverityColor}
+                  getSeverityBgColor={getSeverityBgColor}
+                  sensorList={sensorList}
+                  logLoadingMore={logLoadingMore}
+                  hasMore={hasMore}
                 />
               </>
             )}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
 import { 
   Menu, 
@@ -13,6 +13,42 @@ import {
   Activity,
 } from 'lucide-react';
 import { useWebSocket } from '../context/WebSocketContext';
+import { useActiveTab } from '../context/ActiveTabContext';
+import { useTimezone } from '../context/TimezoneContext';
+import HeadlessUIDropdown from './HeadlessUIDropdown';
+import { getTimezoneAbbr } from '../services/timezoneUtils';
+
+const COMMON_TIMEZONES = [
+  'UTC',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Anchorage',
+  'Pacific/Honolulu',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Moscow',
+  'Asia/Dubai',
+  'Asia/Kolkata',
+  'Asia/Bangkok',
+  'Asia/Shanghai',
+  'Asia/Hong_Kong',
+  'Asia/Tokyo',
+  'Asia/Seoul',
+  'Australia/Sydney',
+  'Australia/Melbourne',
+  'Australia/Perth',
+  'Pacific/Auckland',
+  'Pacific/Fiji',
+  'Africa/Cairo',
+  'Africa/Johannesburg',
+  'America/Toronto',
+  'America/Mexico_City',
+  'America/Buenos_Aires',
+  'America/Sao_Paulo',
+];
 
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -20,6 +56,15 @@ export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { connectionStatus } = useWebSocket();
+  const { activeTab, setActiveTab } = useActiveTab();
+  const { timezone, setTimezone } = useTimezone();
+
+  // Reset activeTab when leaving the Threats page
+  useEffect(() => {
+    if (!location.pathname.startsWith('/threats')) {
+      setActiveTab(null);
+    }
+  }, [location.pathname, setActiveTab]);
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -261,9 +306,10 @@ export function Layout() {
             borderColor: 'rgba(226,232,240,0.9)',
             boxShadow: scrolled ? '0 8px 30px rgba(15, 23, 42, 0.08)' : 'none',
             backdropFilter: 'blur(14px)',
+            paddingRight: '75px',
           }}
         >
-          <div className="flex w-full items-center justify-between gap-4">
+          <div className="flex w-full items-center justify-start gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-3">
                 <Shield size={24} style={{ color: 'var(--accent-cyan)' }} />
@@ -281,16 +327,31 @@ export function Layout() {
               </div>
             </div>
 
-            <div
-              className="flex items-center gap-3 rounded-full border px-4 py-2"
-              style={{
-                background: statusMeta.bg,
-                borderColor: 'rgba(226,232,240,0.9)',
-                color: statusMeta.tone,
-              }}
-            >
-              <statusMeta.icon size={16} />
-              <span className="text-sm font-semibold">{statusMeta.label}</span>
+            {activeTab !== 'logs' && (
+              <div
+                className="flex items-center gap-3 rounded-full border px-4 py-2"
+                style={{
+                  background: statusMeta.bg,
+                  borderColor: 'rgba(226,232,240,0.9)',
+                  color: statusMeta.tone,
+                }}
+              >
+                <statusMeta.icon size={16} />
+                <span className="text-sm font-semibold">{statusMeta.label}</span>
+              </div>
+            )}
+
+            {/* Timezone Dropdown - positioned on right */}
+            <div style={{ width: '160px', marginLeft: 'auto' }}>
+              <HeadlessUIDropdown
+                value={timezone}
+                onChange={setTimezone}
+                options={COMMON_TIMEZONES.map((tz) => ({
+                  value: tz,
+                  label: tz,
+                }))}
+                placeholder={getTimezoneAbbr(timezone)}
+              />
             </div>
           </div>
         </header>

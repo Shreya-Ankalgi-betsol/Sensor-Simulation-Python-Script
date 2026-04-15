@@ -67,10 +67,14 @@ export default function HeadlessUIDropdown({
             border: '1px solid #E2E8F0',
             borderRadius: '6px',
             marginTop: '4px',
-            minWidth: '150px',
+            minWidth: '300px',
+            maxWidth: 'calc(100vw - 24px)',
             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-            zIndex: 50,
+            zIndex: 9999,
             padding: '4px',
+            maxHeight: '300px',
+            overflowY: 'auto',
+            position: 'fixed',
           }}
         >
           {options.map((option) => (
@@ -84,6 +88,7 @@ export default function HeadlessUIDropdown({
                   fontSize: "1.00625rem",
                   fontFamily: "var(--font-mono)",
                   textAlign: 'left',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 {value === option.value && (

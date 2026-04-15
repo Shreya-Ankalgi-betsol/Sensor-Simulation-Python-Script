@@ -85,27 +85,21 @@ export function LiveAlerts() {
     >
       {/* Header */}
       <div className="px-4 py-3 border-b flex-shrink-0" style={{ borderColor: 'rgba(226,232,240,0.9)' }}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div
-              className="uppercase tracking-[0.2em]"
-              style={{
-                fontSize: 'var(--fs-1)',
-                fontWeight: 700,
-                color: 'var(--accent-cyan)',
-                fontFamily: 'var(--font-mono)',
-              }}
-            >
-              Threat feed
-            </div>
-            <h3 className="mt-1 font-semibold text-slate-900" style={{ fontSize: 'var(--fs-4)' }}>
-              Live alerts
-            </h3>
+        <div>
+          <div
+            className="uppercase tracking-[0.2em]"
+            style={{
+              fontSize: 'var(--fs-1)',
+              fontWeight: 700,
+              color: 'var(--accent-cyan)',
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            Threat feed
           </div>
-
-          <div className="rounded-full px-2.5 py-1 font-semibold" style={{ background: `${connectionMeta.tone}15`, color: connectionMeta.tone, fontSize: 'var(--fs-1)' }}>
-            {connectionMeta.label}
-          </div>
+          <h3 className="mt-1 font-semibold text-slate-900" style={{ fontSize: 'var(--fs-4)' }}>
+            Live alerts
+          </h3>
         </div>
 
       </div>

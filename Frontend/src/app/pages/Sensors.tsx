@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { SensorOut } from "../types/api";
 import {
   Dialog,
@@ -10,13 +11,20 @@ import {
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { ChevronDown, MoreVertical, Plus, RotateCcw } from "lucide-react";
+import { PencilIcon, MapPinIcon } from "@heroicons/react/16/solid";
 import { NotificationBell } from "../components/NotificationBell";
 import { useSensors } from "../context/SensorContext";
 import { useWebSocket } from "../context/WebSocketContext";
+import { useMapNavigation } from "../context/MapNavigationContext";
+import { useTimezone } from "../context/TimezoneContext";
+import { formatTimestampInTimezone } from "../services/timezoneUtils";
 
 export function Sensors() {
+  const navigate = useNavigate();
   const { sensorList, updateSensor, addSensor, fetchSensors, loading, error } = useSensors();
   const { liveThreats: threats } = useWebSocket();
+  const { setZoomTarget } = useMapNavigation();
+  const { timezone } = useTimezone();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingSensor, setEditingSensor] = useState<SensorOut | null>(null);
@@ -168,7 +176,7 @@ export function Sensors() {
   return (
     <div className="p-6 space-y-6">
       {/* Notification Bell */}
-      <NotificationBell liveThreats={threats} enableToasts={false} />
+      <NotificationBell liveThreats={threats} enableToasts={false} clearOnMarkAllRead />
 
       {/* Error Message */}
       {error && (
@@ -226,9 +234,6 @@ export function Sensors() {
           >
             SENSORS
           </h1>
-          <p className="mt-1 max-w-2xl" style={{ color: 'var(--text-secondary)', fontSize: 'var(--fs-2)' }}>
-            Manage sensor inventory, status, and coverage from one central place.
-          </p>
         </div>
 
         {/* Add Sensor Button */}
@@ -456,7 +461,7 @@ export function Sensors() {
                         fontFamily: "var(--font-mono)",
                       }}
                     >
-                      {new Date(sensor.created_at).toLocaleString()}
+                      {formatTimestampInTimezone(sensor.created_at, timezone)}
                     </td>
                     <td className="px-4 py-3 relative" style={{ position: 'relative' }}>
                       <button
@@ -538,7 +543,9 @@ export function Sensors() {
                 padding: '8px 16px',
                 textAlign: 'left',
                 whiteSpace: 'nowrap',
-                display: 'block',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
                 transition: 'all 0.2s',
               }}
               onMouseEnter={(e) => {
@@ -550,7 +557,51 @@ export function Sensors() {
                 e.currentTarget.style.color = '#1E293B'
               }}
             >
+              <PencilIcon className="w-4 h-4" />
               Edit
+            </button>
+            <button
+              onClick={() => {
+                setOpenMenuId(null)
+                const sensor = sensorList.find(s => s.sensor_id === openMenuId)
+                if (sensor) {
+                  // Set zoom target and navigate to dashboard
+                  setZoomTarget({
+                    sensorId: sensor.sensor_id,
+                    lat: sensor.lat,
+                    lng: sensor.lng,
+                    zoomLevel: 16,
+                  });
+                  navigate('/');
+                }
+              }}
+              style={{
+                fontSize: '0.875rem',
+                color: '#1E293B',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                width: '100%',
+                padding: '8px 16px',
+                textAlign: 'left',
+                whiteSpace: 'nowrap',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.2s',
+                borderTop: '1px solid #E2E8F0',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#F0F9FF'
+                e.currentTarget.style.color = '#0284C7'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.color = '#1E293B'
+              }}
+            >
+              <MapPinIcon className="w-4 h-4" />
+              View on Map
             </button>
           </div>
         </>

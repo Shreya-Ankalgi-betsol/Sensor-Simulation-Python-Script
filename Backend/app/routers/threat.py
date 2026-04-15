@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -23,10 +23,10 @@ router = APIRouter(
     ),
 )
 async def get_threats(
-    sensor_type: str | None = None,
-    sensor_id: str | None = None,
-    threat_type: str | None = None,
-    severity: str | None = None,
+    sensor_type: list[str] | None = Query(None),
+    sensor_id: list[str] | None = Query(None),
+    threat_type: list[str] | None = Query(None),
+    severity: list[str] | None = Query(None),
     from_dt: str | None = None,
     to_dt: str | None = None,
     cursor: str | None = None,

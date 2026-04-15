@@ -31,8 +31,8 @@ class AnalyticsService:
 ) -> ThreatTimelineOut:
 
         needs_sensor_join = (
-            filters.location is not None or
-            filters.sensor_type is not None
+            filters.location or
+            filters.sensor_type
         )
 
         # Choose bucket expression based on bucket_by
@@ -54,14 +54,14 @@ class AnalyticsService:
             query = query.join(Sensor, ThreatLog.sensor_id == Sensor.sensor_id)
 
         # Apply filters
-        if filters.location is not None:
-            query = query.where(Sensor.location == filters.location)
-        if filters.sensor_type is not None:
-            query = query.where(Sensor.sensor_type == filters.sensor_type)
-        if filters.severity is not None:
-            query = query.where(ThreatLog.severity == filters.severity)
-        if filters.threat_type is not None:
-            query = query.where(ThreatLog.threat_type == filters.threat_type)
+        if filters.location:
+            query = query.where(Sensor.location.in_(filters.location))
+        if filters.sensor_type:
+            query = query.where(Sensor.sensor_type.in_(filters.sensor_type))
+        if filters.severity:
+            query = query.where(ThreatLog.severity.in_(filters.severity))
+        if filters.threat_type:
+            query = query.where(ThreatLog.threat_type.in_(filters.threat_type))
         if filters.from_dt is not None:
             query = query.where(ThreatLog.timestamp >= filters.from_dt)
         if filters.to_dt is not None:
@@ -94,10 +94,10 @@ class AnalyticsService:
 
         # Get all sensors — apply location and sensor_type filters
         sensor_query = select(Sensor)
-        if filters.location is not None:
-            sensor_query = sensor_query.where(Sensor.location == filters.location)
-        if filters.sensor_type is not None:
-            sensor_query = sensor_query.where(Sensor.sensor_type == filters.sensor_type)
+        if filters.location:
+            sensor_query = sensor_query.where(Sensor.location.in_(filters.location))
+        if filters.sensor_type:
+            sensor_query = sensor_query.where(Sensor.sensor_type.in_(filters.sensor_type))
 
         sensors_result = await db.execute(sensor_query)
         all_sensors = sensors_result.scalars().all()
@@ -112,14 +112,14 @@ class AnalyticsService:
             .group_by(ThreatLog.sensor_id)
         )
 
-        if filters.location is not None:
-            threat_query = threat_query.where(Sensor.location == filters.location)
-        if filters.sensor_type is not None:
-            threat_query = threat_query.where(Sensor.sensor_type == filters.sensor_type)
-        if filters.severity is not None:
-            threat_query = threat_query.where(ThreatLog.severity == filters.severity)
-        if filters.threat_type is not None:
-            threat_query = threat_query.where(ThreatLog.threat_type == filters.threat_type)
+        if filters.location:
+            threat_query = threat_query.where(Sensor.location.in_(filters.location))
+        if filters.sensor_type:
+            threat_query = threat_query.where(Sensor.sensor_type.in_(filters.sensor_type))
+        if filters.severity:
+            threat_query = threat_query.where(ThreatLog.severity.in_(filters.severity))
+        if filters.threat_type:
+            threat_query = threat_query.where(ThreatLog.threat_type.in_(filters.threat_type))
         if filters.from_dt is not None:
             threat_query = threat_query.where(ThreatLog.timestamp >= filters.from_dt)
         if filters.to_dt is not None:
@@ -149,8 +149,8 @@ class AnalyticsService:
     ) -> SeverityBreakdownOut:
 
         needs_sensor_join = (
-            filters.location is not None or
-            filters.sensor_type is not None
+            filters.location or
+            filters.sensor_type
         )
 
         query = (
@@ -163,14 +163,14 @@ class AnalyticsService:
         if needs_sensor_join:
             query = query.join(Sensor, ThreatLog.sensor_id == Sensor.sensor_id)
 
-        if filters.location is not None:
-            query = query.where(Sensor.location == filters.location)
-        if filters.sensor_type is not None:
-            query = query.where(Sensor.sensor_type == filters.sensor_type)
-        if filters.severity is not None:
-            query = query.where(ThreatLog.severity == filters.severity)
-        if filters.threat_type is not None:
-            query = query.where(ThreatLog.threat_type == filters.threat_type)
+        if filters.location:
+            query = query.where(Sensor.location.in_(filters.location))
+        if filters.sensor_type:
+            query = query.where(Sensor.sensor_type.in_(filters.sensor_type))
+        if filters.severity:
+            query = query.where(ThreatLog.severity.in_(filters.severity))
+        if filters.threat_type:
+            query = query.where(ThreatLog.threat_type.in_(filters.threat_type))
         if filters.from_dt is not None:
             query = query.where(ThreatLog.timestamp >= filters.from_dt)
         if filters.to_dt is not None:
@@ -213,8 +213,8 @@ class AnalyticsService:
     ) -> ThreatTypeBreakdownOut:
 
         needs_sensor_join = (
-            filters.location is not None or
-            filters.sensor_type is not None
+            filters.location or
+            filters.sensor_type
         )
 
         query = select(
@@ -225,14 +225,14 @@ class AnalyticsService:
         if needs_sensor_join:
             query = query.join(Sensor, ThreatLog.sensor_id == Sensor.sensor_id)
 
-        if filters.location is not None:
-            query = query.where(Sensor.location == filters.location)
-        if filters.sensor_type is not None:
-            query = query.where(Sensor.sensor_type == filters.sensor_type)
-        if filters.severity is not None:
-            query = query.where(ThreatLog.severity == filters.severity)
-        if filters.threat_type is not None:
-            query = query.where(ThreatLog.threat_type == filters.threat_type)
+        if filters.location:
+            query = query.where(Sensor.location.in_(filters.location))
+        if filters.sensor_type:
+            query = query.where(Sensor.sensor_type.in_(filters.sensor_type))
+        if filters.severity:
+            query = query.where(ThreatLog.severity.in_(filters.severity))
+        if filters.threat_type:
+            query = query.where(ThreatLog.threat_type.in_(filters.threat_type))
         if filters.from_dt is not None:
             query = query.where(ThreatLog.timestamp >= filters.from_dt)
         if filters.to_dt is not None:

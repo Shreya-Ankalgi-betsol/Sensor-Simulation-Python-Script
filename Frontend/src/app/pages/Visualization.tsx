@@ -18,9 +18,9 @@ import {
 } from 'recharts';
 import { Download, RotateCcw } from 'lucide-react';
 import { parseISO, formatISO } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
 import { NotificationBell } from '../components/NotificationBell';
 import HeadlessUIDropdown from '../components/HeadlessUIDropdown';
+import CheckboxGroup from '../components/CheckboxGroup';
 import { useWebSocket } from '../context/WebSocketContext';
 import { useSensors } from '../context/SensorContext';
 import { apiGet, APIError } from '../services/apiClient';
@@ -42,43 +42,23 @@ export function Visualization() {
 
   // Filter state
   const [filterTimeRange, setFilterTimeRange] = useState('Last 7 Days');
-  const [filterLocation, setFilterLocation] = useState('All');
-  const [filterThreatType, setFilterThreatType] = useState('All');
-  const [filterSensorType, setFilterSensorType] = useState('All');
-  const [filterSeverity, setFilterSeverity] = useState('All');
+  const [filterLocation, setFilterLocation] = useState<string[]>([]);
+  const [filterThreatType, setFilterThreatType] = useState<string[]>([]);
+  const [filterSensorType, setFilterSensorType] = useState<string[]>([]);
+  const [filterSeverity, setFilterSeverity] = useState<string[]>([]);
   const [fromDateTime, setFromDateTime] = useState<Date | null>(null);
   const [toDateTime, setToDateTime] = useState<Date | null>(null);
-  const [timezone, setTimezone] = useState<string>(() => {
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone;
-    } catch {
-      return 'UTC';
-    }
-  });
-  const [availableTimezones, setAvailableTimezones] = useState<string[]>([]);
   const [availableThreatTypes, setAvailableThreatTypes] = useState<string[]>([]);
   const [availableLocations, setAvailableLocations] = useState<string[]>([]);
-  const isUpdatingFromSensorTypeRef = useRef<boolean>(false);
-
-  // Initialize available timezones
-  useEffect(() => {
-    try {
-      const tzs = Intl.supportedValuesOf('timeZone');
-      setAvailableTimezones(tzs);
-    } catch {
-      // Fallback to common timezones if not supported
-      setAvailableTimezones(['UTC', 'America/New_York', 'Europe/London', 'Asia/Tokyo']);
-    }
-  }, []);
 
   // Fetch all available threat types (independent of filters, or filtered by sensor type)
-  const fetchAvailableThreatTypes = useCallback(async (sensorType: string = 'All') => {
+  const fetchAvailableThreatTypes = useCallback(async (sensorTypes: string[] = []) => {
     try {
       const params = new URLSearchParams();
       
-      // If a specific sensor type is selected, filter by it
-      if (sensorType !== 'All') {
-        params.append('sensor_type', sensorType);
+      // If specific sensor types are selected, filter by them
+      if (sensorTypes.length > 0) {
+        sensorTypes.forEach(type => params.append('sensor_type', type));
       }
       
       const suffix = params.toString() ? `?${params.toString()}` : '';
@@ -97,7 +77,7 @@ export function Visualization() {
 
   // When sensor type changes, reset threat type and fetch filtered threat types
   useEffect(() => {
-    setFilterThreatType('All');
+    setFilterThreatType([]);
     fetchAvailableThreatTypes(filterSensorType);
   }, [filterSensorType, fetchAvailableThreatTypes]);
 
@@ -105,18 +85,17 @@ export function Visualization() {
   const buildQueryParams = () => {
     const params = new URLSearchParams();
     
-    if (filterLocation !== 'All') {
-      params.append('location', filterLocation);
-    }
-    if (filterSensorType !== 'All') {
-      params.append('sensor_type', filterSensorType);
-    }
-    if (filterThreatType !== 'All') {
-      params.append('threat_type', filterThreatType);
-    }
-    if (filterSeverity !== 'All') {
-      params.append('severity', filterSeverity);
-    }
+    // Append location filters (repeated param for each selected item)
+    filterLocation.forEach(loc => params.append('location', loc));
+    
+    // Append sensor type filters
+    filterSensorType.forEach(type => params.append('sensor_type', type));
+    
+    // Append threat type filters
+    filterThreatType.forEach(type => params.append('threat_type', type));
+    
+    // Append severity filters
+    filterSeverity.forEach(sev => params.append('severity', sev));
 
     // Handle time range parameters
     const now = new Date();
@@ -134,18 +113,16 @@ export function Visualization() {
     } else if (filterTimeRange === 'Last 30 Days') {
       startTime = formatISO(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
     } else if (filterTimeRange === 'Custom' && fromDateTime && toDateTime) {
-      // Convert to timezone-adjusted ISO format
-      const startZoned = toZonedTime(fromDateTime, timezone);
-      const endZoned = toZonedTime(toDateTime, timezone);
-      startTime = formatISO(startZoned);
-      endTime = formatISO(endZoned);
+      // Send UTC dates to backend
+      startTime = formatISO(fromDateTime);
+      endTime = formatISO(toDateTime);
     }
 
     if (startTime) {
-      params.append('start_time', startTime);
+      params.append('from_dt', startTime);
     }
     if (endTime) {
-      params.append('end_time', endTime);
+      params.append('to_dt', endTime);
     }
 
     return params.toString();
@@ -221,7 +198,7 @@ export function Visualization() {
       }
     };
     fetchAnalytics();
-  }, [filterTimeRange, filterLocation, filterThreatType, filterSensorType, filterSeverity, fromDateTime, toDateTime, timezone]);
+  }, [filterTimeRange, filterLocation, filterThreatType, filterSensorType, filterSeverity, fromDateTime, toDateTime]);
 
   // Merge API threats with live threats, removing duplicates by alert_id
   const mergedThreats = Array.from(
@@ -230,18 +207,18 @@ export function Visualization() {
 
   // Filter threats based on all criteria
   const filteredThreats = mergedThreats.filter((threat) => {
-    // Threat Type filter
-    if (filterThreatType !== 'All' && threat.threat_type !== filterThreatType) {
+    // Threat Type filter (OR logic - match any selected value)
+    if (filterThreatType.length > 0 && !filterThreatType.includes(threat.threat_type)) {
       return false;
     }
 
-    // Sensor Type filter
-    if (filterSensorType !== 'All' && threat.sensor_type !== filterSensorType) {
+    // Sensor Type filter (OR logic)
+    if (filterSensorType.length > 0 && !filterSensorType.includes(threat.sensor_type)) {
       return false;
     }
 
-    // Severity filter
-    if (filterSeverity !== 'All' && threat.severity !== filterSeverity) {
+    // Severity filter (OR logic)
+    if (filterSeverity.length > 0 && !filterSeverity.includes(threat.severity)) {
       return false;
     }
 
@@ -271,17 +248,12 @@ export function Visualization() {
   // Reset filters
   const resetFilters = () => {
     setFilterTimeRange('Last 7 Days');
-    setFilterLocation('All');
-    setFilterThreatType('All');
-    setFilterSensorType('All');
-    setFilterSeverity('All');
+    setFilterLocation([]);
+    setFilterThreatType([]);
+    setFilterSensorType([]);
+    setFilterSeverity([]);
     setFromDateTime(null);
     setToDateTime(null);
-    try {
-      setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
-    } catch {
-      setTimezone('UTC');
-    }
   };
 
   return (
@@ -345,7 +317,11 @@ export function Visualization() {
       `}</style>
       <div className="p-4 space-y-4 xl:p-5">
         {/* Notification Bell */}
-        <NotificationBell liveThreats={liveThreats} />
+        <NotificationBell
+          liveThreats={liveThreats}
+          enableToasts={false}
+          clearOnMarkAllRead
+        />
 
         {/* Page Header */}
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -436,75 +412,58 @@ export function Visualization() {
 
               {/* Location */}
               <div className="flex-1 min-w-[150px]">
-                <HeadlessUIDropdown
-                  value={filterLocation}
-                  onChange={setFilterLocation}
-                  options={[
-                    { value: "All", label: "All" },
-                    ...availableLocations.map((location) => ({
-                      value: location,
-                      label: location,
-                    })),
-                  ]}
+                <CheckboxGroup
                   label="Location"
+                  selected={filterLocation}
+                  onChange={setFilterLocation}
+                  options={availableLocations.map((location) => ({
+                    value: location,
+                    label: location,
+                  }))}
+                  placeholderText="All Locations"
                 />
               </div>
 
               {/* Threat Type */}
               <div className="flex-1 min-w-[150px]">
-                <HeadlessUIDropdown
-                  value={filterThreatType}
-                  onChange={setFilterThreatType}
-                  options={[
-                    { value: "All", label: "All" },
-                    ...availableThreatTypes.map((threatType) => ({
-                      value: threatType,
-                      label: threatType,
-                    })),
-                  ]}
+                <CheckboxGroup
                   label="Threat Type"
+                  selected={filterThreatType}
+                  onChange={setFilterThreatType}
+                  options={availableThreatTypes.map((threatType) => ({
+                    value: threatType,
+                    label: threatType,
+                  }))}
+                  placeholderText="All Threats"
                 />
               </div>
 
               {/* Sensor Type */}
               <div className="flex-1 min-w-[150px]">
-                <HeadlessUIDropdown
-                  value={filterSensorType}
+                <CheckboxGroup
+                  label="Sensor Type"
+                  selected={filterSensorType}
                   onChange={setFilterSensorType}
                   options={[
-                    { value: "All", label: "All" },
                     { value: "radar", label: "Radar" },
                     { value: "lidar", label: "Lidar" },
                   ]}
-                  label="Sensor Type"
+                  placeholderText="All Types"
                 />
               </div>
 
               {/* Severity */}
               <div className="flex-1 min-w-[150px]">
-                <HeadlessUIDropdown
-                  value={filterSeverity}
+                <CheckboxGroup
+                  label="Severity"
+                  selected={filterSeverity}
                   onChange={setFilterSeverity}
                   options={[
-                    { value: "All", label: "All" },
                     { value: "high", label: "High" },
                     { value: "med", label: "Medium" },
                     { value: "low", label: "Low" },
                   ]}
-                  label="Severity"
-                />
-              </div>
-
-              {/* Timezone */}
-              <div className="flex-1 min-w-[150px]">
-                <HeadlessUIDropdown
-                  value={timezone}
-                  onChange={setTimezone}
-                  options={availableTimezones.map((tz) => ({
-                    value: tz,
-                    label: tz,
-                  }))}
-                  label="Timezone"
+                  placeholderText="All Severities"
                 />
               </div>
 

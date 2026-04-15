@@ -45,10 +45,10 @@ class PagedThreats(BaseModel):
 
 # Filter params 
 class ThreatFilter(BaseModel):
-    sensor_type: Optional[str] = None
-    sensor_id: Optional[str] = None
-    threat_type: Optional[str] = None
-    severity: Optional[ThreatSeverity] = None
+    sensor_type: Optional[list[str]] = None
+    sensor_id: Optional[list[str]] = None
+    threat_type: Optional[list[str]] = None
+    severity: Optional[list[str]] = None
     
     from_dt: Optional[datetime] = None
     to_dt: Optional[datetime] = None
