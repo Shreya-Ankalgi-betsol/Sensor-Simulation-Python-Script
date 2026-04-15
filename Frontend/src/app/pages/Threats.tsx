@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
-import { useSearchParams } from "react-router";
+import { useSearchParams, useNavigate } from "react-router";
 import type { Ref } from "react";
 
 import DatePicker from 'react-datepicker'
@@ -8,6 +8,7 @@ import { RotateCcw } from "lucide-react";
 import { useWebSocket } from '../context/WebSocketContext'
 import { useActiveTab } from '../context/ActiveTabContext';
 import { useTimezone } from '../context/TimezoneContext';
+import { useMapNavigation } from '../context/MapNavigationContext';
 import { useSensors } from "../context/SensorContext";
 import { apiGet, APIError } from '../services/apiClient';
 import { ThreatLog, ThreatSummaryOut, PagedThreats } from '../types/api';
@@ -29,6 +30,7 @@ type ThreatTableProps = {
   sensorList: Array<{ sensor_id: string; location?: string }>;
   logLoadingMore?: boolean;
   hasMore?: boolean;
+  onThreatClick?: (threat: ThreatLog) => void;
 };
 
 const ThreatTable = ({
@@ -43,6 +45,7 @@ const ThreatTable = ({
   sensorList,
   logLoadingMore = false,
   hasMore = true,
+  onThreatClick,
 }: ThreatTableProps) => (
   <div
     className="rounded-2xl overflow-hidden shadow-sm"
@@ -129,11 +132,13 @@ const ThreatTable = ({
             threats.map((threat, index) => (
               <tr
                 key={threat.alert_id}
+                onClick={() => onThreatClick?.(threat)}
                 className="border-b transition-all duration-200"
                 style={{
                   background:
                     index % 2 === 0 ? "var(--bg-card)" : "var(--bg-table-alt)",
                   borderColor: "var(--border-color)",
+                  cursor: "pointer",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = "var(--bg-hover)";
@@ -251,6 +256,8 @@ const ThreatTable = ({
 
 export function Threats() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { setSelectedThreat } = useMapNavigation();
   const { sensorList } = useSensors();
   const { liveThreats, isConnected, connectionStatus } = useWebSocket();
   const { activeTab: globalActiveTab, setActiveTab: updateGlobalActiveTab } = useActiveTab();
@@ -662,6 +669,12 @@ export function Threats() {
     setFilterSeverities([]);
     setFromDateTime(null)
     setToDateTime(null)
+  };
+
+  // Handle clicking on a threat - navigate to dashboard with selected threat
+  const handleThreatClick = (threat: ThreatLog) => {
+    setSelectedThreat(threat);
+    navigate('/');
   };
 
   // Compute available sensor IDs based on selected sensor types
@@ -1098,6 +1111,7 @@ export function Threats() {
                   getSeverityColor={getSeverityColor}
                   getSeverityBgColor={getSeverityBgColor}
                   sensorList={sensorList}
+                  onThreatClick={handleThreatClick}
                 />
               </>
             )}
@@ -1320,6 +1334,7 @@ export function Threats() {
                   sensorList={sensorList}
                   logLoadingMore={logLoadingMore}
                   hasMore={hasMore}
+                  onThreatClick={handleThreatClick}
                 />
               </>
             )}

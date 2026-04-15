@@ -1,12 +1,14 @@
-import { AlertTriangle, RadioTower, ShieldAlert, Waves } from 'lucide-react';
+import { AlertTriangle, RadioTower, ShieldAlert, Waves, X } from 'lucide-react';
 import { ThreatMap } from '../components/ThreatMap';
 import { LiveAlerts } from '../components/LiveAlerts';
 import { useSensors } from '../context/SensorContext';
 import { useWebSocket } from '../context/WebSocketContext';
+import { useMapNavigation } from '../context/MapNavigationContext';
 
 export function Dashboard() {
   const { sensorList } = useSensors();
   const { liveThreats, connectionStatus } = useWebSocket();
+  const { selectedThreat, setSelectedThreat } = useMapNavigation();
 
   const activeSensors = sensorList.filter((sensor) => sensor.status === 'active').length;
   const criticalThreats = liveThreats.filter((threat) => ['high', 'critical'].includes(threat.severity)).length;
@@ -37,6 +39,36 @@ export function Dashboard() {
           <div className="h-4 w-px bg-slate-200" />
           <div className="text-sm font-semibold text-slate-900">{sensorList.length} sensors</div>
         </div>
+
+        {/* Selected Threat Banner */}
+        {selectedThreat && (
+          <div
+            className="absolute left-1/2 top-4 z-[600] -translate-x-1/2 flex items-center gap-4 rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-md"
+            style={{
+              background: 'rgba(255, 87, 87, 0.15)',
+              borderColor: '#FF5757',
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={18} style={{ color: '#FF0000' }} />
+              <div>
+                <div className="text-sm font-semibold" style={{ color: '#990000' }}>
+                  Threat Selected
+                </div>
+                <div className="text-xs" style={{ color: '#CC0000' }}>
+                  {selectedThreat.threat_type} • {selectedThreat.sensor_id}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedThreat(null)}
+              className="ml-2 p-1 hover:bg-red-200 rounded transition-colors"
+              title="Clear selected threat"
+            >
+              <X size={18} style={{ color: '#FF0000' }} />
+            </button>
+          </div>
+        )}
 
         <div
           className="absolute right-4 top-4 bottom-4 z-[600] hidden w-[270px] xl:block"

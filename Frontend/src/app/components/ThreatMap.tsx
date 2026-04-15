@@ -9,7 +9,7 @@ import { ThreatLog } from '../types/api';
 export function ThreatMap() {
   const { sensorList } = useSensors();
   const { liveThreats } = useWebSocket();
-  const { zoomTarget, setZoomTarget } = useMapNavigation();
+  const { zoomTarget, setZoomTarget, selectedThreat, setSelectedThreat } = useMapNavigation();
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const sensorLayerRef = useRef<L.LayerGroup | null>(null);
@@ -379,24 +379,32 @@ export function ThreatMap() {
       } else if (sensor) {
         point = [sensor.lat, sensor.lng];
       }
-      const ageMs = now - threatTimeMs;
-      return ageMs >= -threatFutureToleranceMs && ageMs <= threatPointWindowMs;
-    });
+    }
 
-    recentThreats.forEach((threat) => {
+    const now = Date.now();
+
+    // If a threat is selected, only show that threat; otherwise show recent threats
+    const threatsToDisplay = selectedThreat
+      ? [selectedThreat]
+      : liveThreats.filter((threat) => {
+          const threatTimeMs = new Date(threat.timestamp).getTime();
+          const ageMs = now - threatTimeMs;
+          return ageMs >= -threatFutureToleranceMs && ageMs <= threatPointWindowMs;
+        });
+
+    console.log('Threats to display:', threatsToDisplay.length, selectedThreat ? '(selected threat)' : '(live threats)');
+
+    threatsToDisplay.forEach((threat) => {
       const ageMs = Math.max(0, now - new Date(threat.timestamp).getTime());
-      const normalizedAge = Math.min(1, Math.max(0, ageMs / threatPointWindowMs));
-      const fillOpacity = 0.95 - normalizedAge * 0.75;
-      const strokeOpacity = 0.85 - normalizedAge * 0.65;
-      const radius = 5 - normalizedAge * 2.2;
+      const normalizedAge = selectedThreat ? 0 : Math.min(1, Math.max(0, ageMs / threatPointWindowMs));
+      const fillOpacity = selectedThreat ? 0.95 : 0.95 - normalizedAge * 0.75;
+      const strokeOpacity = selectedThreat ? 1.0 : 0.85 - normalizedAge * 0.65;
+      const radius = selectedThreat ? 8 : 5 - normalizedAge * 2.2;
+      const fillColor = selectedThreat ? '#FF0000' : '#DC2626'; // Bright red for selected threat
 
-    L.circleMarker(point, {
-      radius: 10,
-      color: '#7f1d1d',
-      weight: 2.5,
-      fillColor: '#DC2626',
-      fillOpacity: 0.95,
-    }).addTo(threatLayer);
+      const latFromPayload = threat.object_lat;
+      const lngFromPayload = threat.object_lng;
+      let point: [number, number] | null = null;
 
       if (Number.isFinite(latFromPayload) && Number.isFinite(lngFromPayload)) {
         point = [latFromPayload, lngFromPayload];
@@ -417,18 +425,26 @@ export function ThreatMap() {
       }
 
       if (!point) {
+        console.log('Threat has no valid point location:', {
+          threat_type: threat.threat_type,
+          sensor_id: threat.sensor_id,
+          lat: latFromPayload,
+          lng: lngFromPayload,
+        });
         return;
       }
 
+      console.log('Adding threat marker at:', point, { threat_type: threat.threat_type, isSelected: !!selectedThreat });
+
       L.circleMarker(point, {
         radius: Math.max(2.5, radius),
-        color: `rgba(127, 29, 29, ${Math.max(0.2, strokeOpacity).toFixed(3)})`,
-        weight: 1,
-        fillColor: '#DC2626',
+        color: selectedThreat ? '#FF0000' : `rgba(127, 29, 29, ${Math.max(0.2, strokeOpacity).toFixed(3)})`,
+        weight: selectedThreat ? 3 : 1,
+        fillColor: fillColor,
         fillOpacity: Math.max(0.15, fillOpacity),
       }).addTo(threatLayer);
     });
-  }, [liveThreats, sensorList, threatFutureToleranceMs]);
+  }, [liveThreats, sensorList, threatFutureToleranceMs, selectedThreat]);
 
   // Handle zoom to specific sensor
   useEffect(() => {
@@ -449,6 +465,53 @@ export function ThreatMap() {
       setZoomTarget(null);
     }, 700);
   }, [zoomTarget, setZoomTarget]);
+
+  // Handle zooming to selected threat
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !selectedThreat) {
+      return;
+    }
+
+    // Debug: Log selected threat data
+    console.log('Selected threat for zoom:', {
+      threat_type: selectedThreat.threat_type,
+      sensor_id: selectedThreat.sensor_id,
+      object_lat: selectedThreat.object_lat,
+      object_lng: selectedThreat.object_lng,
+      object_bearing_deg: selectedThreat.object_bearing_deg,
+      object_range_m: selectedThreat.object_range_m,
+      timestamp: selectedThreat.timestamp,
+    });
+
+    // Get threat location
+    const threatLat = Number(selectedThreat.object_lat);
+    const threatLng = Number(selectedThreat.object_lng);
+    const sensor = sensorList.find(s => s.sensor_id === selectedThreat.sensor_id);
+
+    let lat: number;
+    let lng: number;
+
+    if (Number.isFinite(threatLat) && Number.isFinite(threatLng)) {
+      console.log('Using threat lat/lng:', [threatLat, threatLng]);
+      lat = threatLat;
+      lng = threatLng;
+    } else if (sensor) {
+      console.log('Falling back to sensor location:', [sensor.lat, sensor.lng]);
+      lat = sensor.lat;
+      lng = sensor.lng;
+    } else {
+      console.log('No valid location found for threat');
+      return;
+    }
+
+    console.log('Zooming to:', [lat, lng]);
+    // Zoom to threat location with zoom level 17
+    map.setView([lat, lng], 17, {
+      animate: true,
+      duration: 0.6,
+    });
+  }, [selectedThreat, sensorList]);
 
   return (
     <div
