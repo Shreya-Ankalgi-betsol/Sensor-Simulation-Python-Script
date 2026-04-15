@@ -13,7 +13,6 @@ export function ThreatMap() {
   const sensorLayerRef = useRef<L.LayerGroup | null>(null);
   const threatLayerRef = useRef<L.LayerGroup | null>(null);
   const activeWindowMs = 2 * 60 * 1000;
-  const threatPointWindowMs = 8 * 1000;
 
   const latestThreatBySensor = useMemo(() => {
     const threatMap = new Map<string, ThreatLog>();
@@ -299,7 +298,7 @@ export function ThreatMap() {
       duration: 0.35,
       maxZoom: 16,
     });
-  }, [sensorList, defaultCenter]);
+  }, [sensorList, defaultCenter, latestThreatBySensor]);
 
   useEffect(() => {
     const threatLayer = threatLayerRef.current;
@@ -309,58 +308,53 @@ export function ThreatMap() {
 
     threatLayer.clearLayers();
 
-    const now = Date.now();
+    // Show only the most recent threat
+    if (liveThreats.length === 0) {
+      return;
+    }
+
+    const latestThreat = liveThreats.reduce((latest, current) => {
+      const latestTime = new Date(latest.timestamp).getTime();
+      const currentTime = new Date(current.timestamp).getTime();
+      return currentTime > latestTime ? current : latest;
+    });
+
     const sensorById = new Map(sensorList.map((sensor) => [sensor.sensor_id, sensor]));
-    const recentThreats = liveThreats.filter((threat) => {
-      const threatTimeMs = new Date(threat.timestamp).getTime();
-      if (!Number.isFinite(threatTimeMs)) {
-        return false;
+
+    const latFromPayload = Number(latestThreat.object_lat);
+    const lngFromPayload = Number(latestThreat.object_lng);
+    let point: [number, number] | null = null;
+
+    if (Number.isFinite(latFromPayload) && Number.isFinite(lngFromPayload)) {
+      point = [latFromPayload, lngFromPayload];
+    } else {
+      const sensor = sensorById.get(latestThreat.sensor_id);
+      const rangeM = Number(latestThreat.object_range_m);
+      const bearingDeg = Number(latestThreat.object_bearing_deg);
+
+      if (
+        sensor &&
+        Number.isFinite(rangeM) &&
+        Number.isFinite(bearingDeg)
+      ) {
+        point = destinationFromSensor(sensor.lat, sensor.lng, rangeM, bearingDeg);
+      } else if (sensor) {
+        point = [sensor.lat, sensor.lng];
       }
-      const ageMs = now - threatTimeMs;
-      return ageMs >= 0 && ageMs <= threatPointWindowMs;
-    });
+    }
 
-    recentThreats.forEach((threat) => {
-      const ageMs = now - new Date(threat.timestamp).getTime();
-      const normalizedAge = Math.min(1, Math.max(0, ageMs / threatPointWindowMs));
-      const fillOpacity = 0.95 - normalizedAge * 0.75;
-      const strokeOpacity = 0.85 - normalizedAge * 0.65;
-      const radius = 5 - normalizedAge * 2.2;
+    if (!point) {
+      return;
+    }
 
-      const latFromPayload = Number(threat.object_lat);
-      const lngFromPayload = Number(threat.object_lng);
-      let point: [number, number] | null = null;
+    L.circleMarker(point, {
+      radius: 10,
+      color: '#7f1d1d',
+      weight: 2.5,
+      fillColor: '#DC2626',
+      fillOpacity: 0.95,
+    }).addTo(threatLayer);
 
-      if (Number.isFinite(latFromPayload) && Number.isFinite(lngFromPayload)) {
-        point = [latFromPayload, lngFromPayload];
-      } else {
-        const sensor = sensorById.get(threat.sensor_id);
-        const rangeM = Number(threat.object_range_m);
-        const bearingDeg = Number(threat.object_bearing_deg);
-
-        if (
-          sensor &&
-          Number.isFinite(rangeM) &&
-          Number.isFinite(bearingDeg)
-        ) {
-          point = destinationFromSensor(sensor.lat, sensor.lng, rangeM, bearingDeg);
-        } else if (sensor) {
-          point = [sensor.lat, sensor.lng];
-        }
-      }
-
-      if (!point) {
-        return;
-      }
-
-      L.circleMarker(point, {
-        radius: Math.max(2.5, radius),
-        color: `rgba(127, 29, 29, ${Math.max(0.2, strokeOpacity).toFixed(3)})`,
-        weight: 1,
-        fillColor: '#DC2626',
-        fillOpacity: Math.max(0.15, fillOpacity),
-      }).addTo(threatLayer);
-    });
   }, [liveThreats, sensorList]);
 
   return (
