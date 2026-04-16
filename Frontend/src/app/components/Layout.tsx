@@ -17,6 +17,7 @@ import { useActiveTab } from '../context/ActiveTabContext';
 import { useTimezone } from '../context/TimezoneContext';
 import HeadlessUIDropdown from './HeadlessUIDropdown';
 import { getTimezoneAbbr } from '../services/timezoneUtils';
+import { NotificationBell } from './NotificationBell';
 
 const COMMON_TIMEZONES = [
   'UTC',
@@ -55,8 +56,8 @@ export function Layout() {
   const [scrolled, setScrolled] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { connectionStatus } = useWebSocket();
-  const { activeTab, setActiveTab } = useActiveTab();
+  const { connectionStatus, liveThreats } = useWebSocket();
+  const { activeTab, setActiveTab, isLiveStreamPaused } = useActiveTab();
   const { timezone, setTimezone } = useTimezone();
 
   // Reset activeTab when leaving the Threats page
@@ -110,6 +111,8 @@ export function Layout() {
     },
   }[connectionStatus];
 
+  const isViewingLiveStream = activeTab === 'live' && !isLiveStreamPaused;
+
   return (
     <div
       className="min-h-screen flex"
@@ -117,6 +120,12 @@ export function Layout() {
         background: 'var(--bg-primary)',
       }}
     >
+      <NotificationBell
+        liveThreats={liveThreats}
+        enableToasts={false}
+        clearOnMarkAllRead
+        isViewingLiveStream={isViewingLiveStream}
+      />
       {/* Sidebar */}
       <aside
         className="fixed left-0 top-0 h-full transition-all duration-300 ease-in-out z-50"
