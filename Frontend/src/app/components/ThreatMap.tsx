@@ -13,6 +13,12 @@ export function ThreatMap() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const sensorLayerRef = useRef<L.LayerGroup | null>(null);
+  const sensorListRef = useRef(sensorList); // Keep sensor list in ref to avoid dependency triggers
+
+  // Update sensor ref whenever sensorList changes (but don't trigger threat re-render)
+  useEffect(() => {
+    sensorListRef.current = sensorList;
+  }, [sensorList]);
   const threatLayerRef = useRef<L.LayerGroup | null>(null);
   const lastSensorLayoutKeyRef = useRef<string>('');
   const activeWindowMs = 2 * 60 * 1000;
@@ -73,6 +79,20 @@ export function ThreatMap() {
       case 'inactive':
       default:
         return '#64748B';
+    }
+  };
+
+  const getThreatColor = (severity: string): string => {
+    switch (severity?.toLowerCase()) {
+      case 'high':
+        return '#DC2626'; // Red
+      case 'med':
+      case 'medium':
+        return '#EA580C'; // Orange
+      case 'low':
+        return '#16A34A'; // Green
+      default:
+        return '#DC2626'; // Default to red
     }
   };
 
@@ -351,36 +371,6 @@ export function ThreatMap() {
       return;
     }
 
-    const latestThreat = liveThreats.reduce((latest, current) => {
-      const latestTime = new Date(latest.timestamp).getTime();
-      const currentTime = new Date(current.timestamp).getTime();
-      return currentTime > latestTime ? current : latest;
-    });
-
-    const sensorById = new Map(sensorList.map((sensor) => [sensor.sensor_id, sensor]));
-
-    const latFromPayload = Number(latestThreat.object_lat);
-    const lngFromPayload = Number(latestThreat.object_lng);
-    let point: [number, number] | null = null;
-
-    if (Number.isFinite(latFromPayload) && Number.isFinite(lngFromPayload)) {
-      point = [latFromPayload, lngFromPayload];
-    } else {
-      const sensor = sensorById.get(latestThreat.sensor_id);
-      const rangeM = Number(latestThreat.object_range_m);
-      const bearingDeg = Number(latestThreat.object_bearing_deg);
-
-      if (
-        sensor &&
-        Number.isFinite(rangeM) &&
-        Number.isFinite(bearingDeg)
-      ) {
-        point = destinationFromSensor(sensor.lat, sensor.lng, rangeM, bearingDeg);
-      } else if (sensor) {
-        point = [sensor.lat, sensor.lng];
-      }
-    }
-
     const now = Date.now();
 
     // If a threat is selected, only show that threat; otherwise show recent threats
@@ -394,13 +384,19 @@ export function ThreatMap() {
 
     console.log('Threats to display:', threatsToDisplay.length, selectedThreat ? '(selected threat)' : '(live threats)');
 
+    const sensorById = new Map(sensorListRef.current.map((sensor) => [sensor.sensor_id, sensor]));
+
     threatsToDisplay.forEach((threat) => {
       const ageMs = Math.max(0, now - new Date(threat.timestamp).getTime());
       const normalizedAge = selectedThreat ? 0 : Math.min(1, Math.max(0, ageMs / threatPointWindowMs));
       const fillOpacity = selectedThreat ? 0.95 : 0.95 - normalizedAge * 0.75;
       const strokeOpacity = selectedThreat ? 1.0 : 0.85 - normalizedAge * 0.65;
       const radius = selectedThreat ? 8 : 5 - normalizedAge * 2.2;
-      const fillColor = selectedThreat ? '#FF0000' : '#DC2626'; // Bright red for selected threat
+      
+      // Get color based on threat severity
+      const severityColor = getThreatColor(threat.severity);
+      const fillColor = severityColor;
+      const strokeColor = selectedThreat ? severityColor : `rgba(127, 29, 29, ${Math.max(0.2, strokeOpacity).toFixed(3)})`;
 
       const latFromPayload = threat.object_lat;
       const lngFromPayload = threat.object_lng;
@@ -438,13 +434,13 @@ export function ThreatMap() {
 
       L.circleMarker(point, {
         radius: Math.max(2.5, radius),
-        color: selectedThreat ? '#FF0000' : `rgba(127, 29, 29, ${Math.max(0.2, strokeOpacity).toFixed(3)})`,
+        color: strokeColor,
         weight: selectedThreat ? 3 : 1,
         fillColor: fillColor,
         fillOpacity: Math.max(0.15, fillOpacity),
       }).addTo(threatLayer);
     });
-  }, [liveThreats, sensorList, threatFutureToleranceMs, selectedThreat]);
+  }, [selectedThreat, threatFutureToleranceMs, liveThreats.length]);
 
   // Handle zoom to specific sensor
   useEffect(() => {
@@ -487,7 +483,7 @@ export function ThreatMap() {
     // Get threat location
     const threatLat = Number(selectedThreat.object_lat);
     const threatLng = Number(selectedThreat.object_lng);
-    const sensor = sensorList.find(s => s.sensor_id === selectedThreat.sensor_id);
+    const sensor = sensorListRef.current.find(s => s.sensor_id === selectedThreat.sensor_id);
 
     let lat: number;
     let lng: number;
@@ -511,7 +507,7 @@ export function ThreatMap() {
       animate: true,
       duration: 0.6,
     });
-  }, [selectedThreat, sensorList]);
+  }, [selectedThreat]);
 
   return (
     <div

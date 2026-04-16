@@ -15,6 +15,7 @@ import { ThreatLog, ThreatSummaryOut, PagedThreats } from '../types/api';
 import HeadlessUIDropdown from '../components/HeadlessUIDropdown';
 import CheckboxGroup from '../components/CheckboxGroup';
 import { NotificationBell } from '../components/NotificationBell';
+import { ThreatDetailsModal } from '../components/ThreatDetailsModal';
 
 type ActiveTab = 'live' | 'logs';
 
@@ -297,6 +298,10 @@ export function Threats() {
   const scrollPositionRef = useRef<number>(0);
   const prevThreatCountRef = useRef<number>(0);
   const shouldRestoreScrollRef = useRef<boolean>(false);
+  
+  // Modal state for threat details
+  const [selectedThreatForModal, setSelectedThreatForModal] = useState<ThreatLog | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   
   // Refs to maintain fresh state values in scroll listener without re-attaching
   const paginationStateRef = useRef({ 
@@ -671,10 +676,20 @@ export function Threats() {
     setToDateTime(null)
   };
 
-  // Handle clicking on a threat - navigate to dashboard with selected threat
+  // Handle clicking on a threat - show details modal
   const handleThreatClick = (threat: ThreatLog) => {
-    setSelectedThreat(threat);
-    navigate('/');
+    setSelectedThreatForModal(threat);
+    setIsModalOpen(true);
+  };
+
+  // Handle "View on Map" button in modal
+  const handleViewOnMap = () => {
+    if (selectedThreatForModal) {
+      setSelectedThreat(selectedThreatForModal);
+      setIsModalOpen(false);
+      setSelectedThreatForModal(null);
+      navigate('/');
+    }
   };
 
   // Compute available sensor IDs based on selected sensor types
@@ -1341,6 +1356,17 @@ export function Threats() {
           </>
         )}
       </div>
+
+      {/* Threat Details Modal */}
+      <ThreatDetailsModal
+        threat={selectedThreatForModal}
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedThreatForModal(null);
+        }}
+        onViewOnMap={handleViewOnMap}
+      />
     </>
   );
 }

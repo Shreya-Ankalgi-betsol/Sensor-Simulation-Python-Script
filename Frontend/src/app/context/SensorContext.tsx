@@ -78,9 +78,16 @@ export function SensorProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Fetch sensors on mount
+  // Fetch sensors on mount and set up periodic polling
   useEffect(() => {
     fetchSensors();
+
+    // Poll for sensor status updates every 20 seconds
+    const pollInterval = setInterval(() => {
+      fetchSensors();
+    }, 20000); // 20 second polling - balances real-time updates with performance
+
+    return () => clearInterval(pollInterval);
   }, []);
 
   return (

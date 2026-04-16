@@ -20,6 +20,23 @@ export function Dashboard() {
     disconnected: { label: 'Disconnected', tone: '#DC2626', bg: 'rgba(220, 38, 38, 0.12)' },
   }[connectionStatus];
 
+  // Get severity-based colors for selected threat banner
+  const getSeverityBannerColor = (severity: string) => {
+    switch (severity?.toLowerCase()) {
+      case 'high':
+        return { bg: 'rgba(220, 38, 38, 0.15)', border: '#DC2626', text: '#991B1B', icon: '#DC2626', subtitle: '#B91C1C' };
+      case 'med':
+      case 'medium':
+        return { bg: 'rgba(234, 88, 12, 0.15)', border: '#EA580C', text: '#92400E', icon: '#EA580C', subtitle: '#C2410C' };
+      case 'low':
+        return { bg: 'rgba(22, 163, 74, 0.15)', border: '#16A34A', text: '#166534', icon: '#16A34A', subtitle: '#15803D' };
+      default:
+        return { bg: 'rgba(220, 38, 38, 0.15)', border: '#DC2626', text: '#991B1B', icon: '#DC2626', subtitle: '#B91C1C' };
+    }
+  };
+
+  const threatBannerColor = selectedThreat ? getSeverityBannerColor(selectedThreat.severity) : null;
+
   return (
     <div className="relative h-[calc(100vh-5rem)] min-h-0 overflow-hidden p-4 lg:p-6">
       <div className="relative h-full min-h-0 rounded-[28px] border shadow-sm" style={{ borderColor: 'rgba(226,232,240,0.9)' }}>
@@ -41,31 +58,32 @@ export function Dashboard() {
         </div>
 
         {/* Selected Threat Banner */}
-        {selectedThreat && (
+        {selectedThreat && threatBannerColor && (
           <div
             className="absolute left-1/2 top-4 z-[600] -translate-x-1/2 flex items-center gap-4 rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-md"
             style={{
-              background: 'rgba(255, 87, 87, 0.15)',
-              borderColor: '#FF5757',
+              background: threatBannerColor.bg,
+              borderColor: threatBannerColor.border,
             }}
           >
             <div className="flex items-center gap-2">
-              <AlertTriangle size={18} style={{ color: '#FF0000' }} />
+              <AlertTriangle size={18} style={{ color: threatBannerColor.icon }} />
               <div>
-                <div className="text-sm font-semibold" style={{ color: '#990000' }}>
+                <div className="text-sm font-semibold" style={{ color: threatBannerColor.text }}>
                   Threat Selected
                 </div>
-                <div className="text-xs" style={{ color: '#CC0000' }}>
+                <div className="text-xs" style={{ color: threatBannerColor.subtitle }}>
                   {selectedThreat.threat_type} • {selectedThreat.sensor_id}
                 </div>
               </div>
             </div>
             <button
               onClick={() => setSelectedThreat(null)}
-              className="ml-2 p-1 hover:bg-red-200 rounded transition-colors"
+              className="ml-2 p-1 hover:bg-opacity-20 rounded transition-colors"
+              style={{ backgroundColor: threatBannerColor.border + '20' }}
               title="Clear selected threat"
             >
-              <X size={18} style={{ color: '#FF0000' }} />
+              <X size={18} style={{ color: threatBannerColor.icon }} />
             </button>
           </div>
         )}
