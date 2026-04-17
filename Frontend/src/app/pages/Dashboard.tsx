@@ -167,6 +167,10 @@ export function Dashboard() {
     [playbackWindowEndMs, playbackWindowStartMs]
   );
 
+  const handleLiveAlertClick = useCallback((threat: ThreatLog) => {
+    setSelectedThreat(threat);
+  }, [setSelectedThreat]);
+
   useEffect(() => {
     if (!isPlaybackMode || !isPlaybackRunning || playbackCursorMs === null) {
       return;
@@ -409,7 +413,7 @@ export function Dashboard() {
         <div
           className="absolute right-4 top-4 bottom-4 z-[600] hidden w-[270px] xl:block"
         >
-          <LiveAlerts />
+          <LiveAlerts onAlertClick={handleLiveAlertClick} />
         </div>
 
         <div
@@ -502,7 +506,7 @@ export function Dashboard() {
         )}
 
         <div className="absolute inset-x-4 bottom-4 z-[600] xl:hidden">
-          <LiveAlerts />
+          <LiveAlerts onAlertClick={handleLiveAlertClick} />
         </div>
       </div>
     </div>

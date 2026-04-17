@@ -12,6 +12,62 @@ class Sensor:
         self.coverage_radius_m = coverage_radius_m
         # 0 deg means facing geographic north.
         self.heading_deg = 0.0
+        self._background_cluster = None
+
+    def _effective_coverage_radius(self):
+        return max(float(self.coverage_radius_m), 1.0)
+
+    def _sample_clustered_background_polar(self, angular_spread_deg=12.0):
+        """Sample a clustered random point constrained by configured coverage radius."""
+        coverage_m = self._effective_coverage_radius()
+
+        needs_new_cluster = (
+            self._background_cluster is None
+            or self._background_cluster["ttl"] <= 0
+            or self._background_cluster["coverage_m"] != coverage_m
+            or random.random() < 0.08
+        )
+
+        if needs_new_cluster:
+            # sqrt keeps area distribution uniform across entire circle, including boundary zones.
+            center_range_m = max(1.0, math.sqrt(random.random()) * coverage_m)
+            center_azimuth_deg = random.uniform(-180.0, 180.0)
+            cluster_radius_m = max(0.8, min(coverage_m * 0.08, 18.0))
+            self._background_cluster = {
+                "center_range_m": center_range_m,
+                "center_azimuth_deg": center_azimuth_deg,
+                "cluster_radius_m": cluster_radius_m,
+                "coverage_m": coverage_m,
+                "ttl": random.randint(6, 14),
+            }
+
+        cluster = self._background_cluster
+        cluster["ttl"] -= 1
+
+        cluster["center_range_m"] = min(
+            coverage_m,
+            max(
+                1.0,
+                cluster["center_range_m"]
+                + random.uniform(-cluster["cluster_radius_m"] * 0.12, cluster["cluster_radius_m"] * 0.12),
+            ),
+        )
+        cluster["center_azimuth_deg"] = (
+            cluster["center_azimuth_deg"] + random.uniform(-2.5, 2.5) + 180.0
+        ) % 360.0 - 180.0
+
+        range_m = min(
+            coverage_m,
+            max(
+                1.0,
+                cluster["center_range_m"] + random.gauss(0.0, cluster["cluster_radius_m"] * 0.35),
+            ),
+        )
+        azimuth_deg = (
+            cluster["center_azimuth_deg"] + random.gauss(0.0, angular_spread_deg * 0.35) + 180.0
+        ) % 360.0 - 180.0
+
+        return round(range_m, 2), round(azimuth_deg, 2)
 
     def _meters_to_latlng(self, north_m, east_m):
         earth_radius_m = 6378137.0
@@ -97,8 +153,7 @@ class RadarSensor(Sensor):
             rcs_dbsm = round(random.uniform(0, 18), 2)
             snr_db = round(random.uniform(0, 12), 2)
 
-        range_m = round(random.uniform(1, 150), 2)
-        azimuth_deg = round(random.uniform(-60, 60), 2)
+        range_m, azimuth_deg = self._sample_clustered_background_polar(angular_spread_deg=14.0)
         derived_position = self._compute_global_position(range_m, azimuth_deg)
 
         return {
@@ -179,36 +234,37 @@ class LidarSensor(Sensor):
     def generate_background_data(self):
         threat_mode = random.random() < 0.15
 
+        range_m, azimuth_deg = self._sample_clustered_background_polar(angular_spread_deg=10.0)
+        azimuth_rad = math.radians(azimuth_deg)
+        centroid_x = round(range_m * math.sin(azimuth_rad), 2)
+        centroid_y = round(range_m * math.cos(azimuth_rad), 2)
+
         if threat_mode:
             # Larger box (more likely to exceed large-volume threshold)
-            x_min = round(random.uniform(-8, -1), 2)
-            x_max = round(random.uniform(1, 8), 2)
-            y_min = round(random.uniform(5, 10), 2)
-            y_max = round(random.uniform(12, 20), 2)
+            width = random.uniform(1.5, 7.0)
+            depth = random.uniform(1.5, 7.5)
+            height = random.uniform(2.0, 4.0)
             z_min = round(random.uniform(0, 0.5), 2)
-            z_max = round(random.uniform(2, 4), 2)
+            z_max = round(z_min + height, 2)
             point_count = random.randint(160, 400)
             velocity_mps = round(random.uniform(-5, 5), 2)
             point_density_ppm2 = round(random.uniform(55, 120), 2)
         else:
             # Small, sparse box (usually below thresholds)
-            x_min = round(random.uniform(-1.0, -0.2), 2)
-            x_max = round(random.uniform(0.2, 1.0), 2)
-            y_min = round(random.uniform(5, 6), 2)
-            y_max = round(random.uniform(6.2, 7.5), 2)
+            width = random.uniform(0.4, 1.5)
+            depth = random.uniform(0.6, 1.8)
+            height = random.uniform(0.3, 1.2)
             z_min = round(random.uniform(0, 0.2), 2)
-            z_max = round(random.uniform(0.3, 1.2), 2)
+            z_max = round(z_min + height, 2)
             point_count = random.randint(5, 120)
             velocity_mps = round(random.uniform(-0.3, 0.3), 2)
             point_density_ppm2 = round(random.uniform(5, 45), 2)
 
-        centroid_x = round((x_min + x_max) / 2, 2)
-        centroid_y = round((y_min + y_max) / 2, 2)
+        x_min = round(centroid_x - width / 2, 2)
+        x_max = round(centroid_x + width / 2, 2)
+        y_min = round(centroid_y - depth / 2, 2)
+        y_max = round(centroid_y + depth / 2, 2)
         centroid_z = round((z_min + z_max) / 2, 2)
-
-        # Assume lidar local frame: +Y forward, +X right.
-        range_m = math.sqrt(centroid_x**2 + centroid_y**2)
-        azimuth_deg = math.degrees(math.atan2(centroid_x, centroid_y))
         derived_position = self._compute_global_position(range_m, azimuth_deg)
 
         return {

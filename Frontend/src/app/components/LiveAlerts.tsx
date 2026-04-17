@@ -7,7 +7,11 @@ interface LiveAlert extends ThreatLog {
   isNew?: boolean;
 }
 
-export function LiveAlerts() {
+interface LiveAlertsProps {
+  onAlertClick?: (alert: ThreatLog) => void;
+}
+
+export function LiveAlerts({ onAlertClick }: LiveAlertsProps) {
   const { liveThreats, connectionStatus } = useWebSocket();
   const [displayAlerts, setDisplayAlerts] = useState<LiveAlert[]>([]);
 
@@ -153,12 +157,26 @@ export function LiveAlerts() {
               <div
                 key={alert.alert_id || `threat-${index}`}  // Fallback to index if alert_id is missing
                 className="rounded-xl border transition-all duration-500"
+                onClick={() => onAlertClick?.(alert)}
+                role={onAlertClick ? 'button' : undefined}
+                tabIndex={onAlertClick ? 0 : undefined}
+                onKeyDown={(event) => {
+                  if (!onAlertClick) {
+                    return;
+                  }
+
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    onAlertClick(alert);
+                  }
+                }}
                 style={{
                   background: alert.isNew ? 'rgba(219,234,254,0.75)' : 'rgba(255,255,255,0.95)',
                   borderColor: 'rgba(226,232,240,0.9)',
                   borderLeft: `4px solid ${severityColor}`,
                   padding: '10px',
                   boxShadow: '0 4px 12px rgba(15, 23, 42, 0.04)',
+                  cursor: onAlertClick ? 'pointer' : 'default',
                 }}
               >
                 <div className="flex items-start gap-3">
