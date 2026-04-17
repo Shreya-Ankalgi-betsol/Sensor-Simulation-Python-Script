@@ -18,7 +18,6 @@ import {
 } from 'recharts';
 import { Download, RotateCcw } from 'lucide-react';
 import { parseISO, formatISO } from 'date-fns';
-import { NotificationBell } from '../components/NotificationBell';
 import HeadlessUIDropdown from '../components/HeadlessUIDropdown';
 import CheckboxGroup from '../components/CheckboxGroup';
 import { useWebSocket } from '../context/WebSocketContext';
@@ -316,13 +315,6 @@ export function Visualization() {
         }
       `}</style>
       <div className="p-4 space-y-4 xl:p-5">
-        {/* Notification Bell */}
-        <NotificationBell
-          liveThreats={liveThreats}
-          enableToasts={false}
-          clearOnMarkAllRead
-        />
-
         {/* Page Header */}
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>

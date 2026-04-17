@@ -12,9 +12,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { ChevronDown, MoreVertical, Plus, RotateCcw } from "lucide-react";
 import { PencilIcon, MapPinIcon } from "@heroicons/react/16/solid";
-import { NotificationBell } from "../components/NotificationBell";
 import { useSensors } from "../context/SensorContext";
-import { useWebSocket } from "../context/WebSocketContext";
 import { useMapNavigation } from "../context/MapNavigationContext";
 import { useTimezone } from "../context/TimezoneContext";
 import { formatTimestampInTimezone } from "../services/timezoneUtils";
@@ -22,7 +20,6 @@ import { formatTimestampInTimezone } from "../services/timezoneUtils";
 export function Sensors() {
   const navigate = useNavigate();
   const { sensorList, updateSensor, addSensor, fetchSensors, loading, error } = useSensors();
-  const { liveThreats: threats } = useWebSocket();
   const { setZoomTarget } = useMapNavigation();
   const { timezone } = useTimezone();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -175,9 +172,6 @@ export function Sensors() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Notification Bell */}
-      <NotificationBell liveThreats={threats} enableToasts={false} clearOnMarkAllRead />
-
       {/* Error Message */}
       {error && (
         <div

@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, X } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { ThreatLog } from '../types/api';
 import { useActiveTab } from '../context/ActiveTabContext';
+import { useTimezone } from '../context/TimezoneContext';
+import { formatTimestampInTimezone } from '../services/timezoneUtils';
 
 interface Notification {
   id: string;
@@ -18,15 +20,19 @@ interface NotificationBellProps {
   liveThreats?: ThreatLog[];
   enableToasts?: boolean;
   clearOnMarkAllRead?: boolean;
+  isViewingLiveStream?: boolean;
 }
 
 export function NotificationBell({
   liveThreats = [],
   enableToasts = true,
   clearOnMarkAllRead = false,
+  isViewingLiveStream = false,
 }: NotificationBellProps) {
   const navigate = useNavigate();
-  const { setActiveTab } = useActiveTab();
+  const location = useLocation();
+  const { setActiveTab, requestLogsRefresh } = useActiveTab();
+  const { timezone } = useTimezone();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showPanel, setShowPanel] = useState(false);
   const [toasts, setToasts] = useState<Notification[]>([]);
@@ -50,6 +56,15 @@ export function NotificationBell({
     }, 3000);
   };
 
+  const stopBellAlert = () => {
+    setIsAlerting(false);
+
+    if (bellAlertTimeoutRef.current !== null) {
+      window.clearTimeout(bellAlertTimeoutRef.current);
+      bellAlertTimeoutRef.current = null;
+    }
+  };
+
   useEffect(() => {
     return () => {
       if (bellAlertTimeoutRef.current !== null) {
@@ -57,6 +72,14 @@ export function NotificationBell({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!isViewingLiveStream) return;
+
+    stopBellAlert();
+    setToasts([]);
+    setNotifications((prev) => prev.map((n) => (n.isRead ? n : { ...n, isRead: true })));
+  }, [isViewingLiveStream]);
 
   useEffect(() => {
     if (liveThreats.length === 0) return;
@@ -79,31 +102,42 @@ export function NotificationBell({
     }
 
     // After init — only process genuinely new threats
+    const newNotifications: Notification[] = [];
+
     liveThreats.forEach((threat) => {
-      if (!seenIdsRef.current.has(threat.alert_id)) {
-        seenIdsRef.current.add(threat.alert_id);
+      if (seenIdsRef.current.has(threat.alert_id)) {
+        return;
+      }
 
-        const newNotification: Notification = {
-          id: threat.alert_id,
-          type: threat.threat_type,
-          description: `${threat.threat_type} detected by ${threat.sensor_id}`,
-          timestamp: threat.timestamp,
-          severity: threat.severity,
-          isRead: false,
-        };
+      seenIdsRef.current.add(threat.alert_id);
 
-        setNotifications((prev) => [newNotification, ...prev.slice(0, 9)]);
+      newNotifications.push({
+        id: threat.alert_id,
+        type: threat.threat_type,
+        description: `${threat.threat_type} detected by ${threat.sensor_id}`,
+        timestamp: threat.timestamp,
+        severity: threat.severity,
+        isRead: isViewingLiveStream,
+      });
+    });
+
+    if (newNotifications.length > 0) {
+      setNotifications((prev) => [...newNotifications, ...prev].slice(0, 10));
+
+      if (!isViewingLiveStream) {
         triggerBellAlert();
-        if (enableToasts) {
-          setToasts((prev) => [...prev, newNotification]);
 
-          setTimeout(() => {
-            setToasts((prev) => prev.filter((t) => t.id !== threat.alert_id));
-          }, 5000);
+        if (enableToasts) {
+          setToasts((prev) => [...prev, ...newNotifications]);
+          newNotifications.forEach((notification) => {
+            setTimeout(() => {
+              setToasts((prev) => prev.filter((t) => t.id !== notification.id));
+            }, 5000);
+          });
         }
       }
-    });
-  }, [liveThreats, enableToasts]); // Only depend on liveThreats to avoid re-render loops
+    }
+  }, [liveThreats, enableToasts, isViewingLiveStream]);
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -131,6 +165,25 @@ export function NotificationBell({
     }
 
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+  };
+
+  const handleViewAll = () => {
+    markAllAsRead();
+    setShowPanel(false);
+    setActiveTab('logs');
+    requestLogsRefresh();
+
+    if (location.pathname !== '/threats') {
+      navigate('/threats');
+    }
+  };
+
+  const formatNotificationTimestamp = (utcTimestamp?: string) => {
+    if (!utcTimestamp) {
+      return 'N/A';
+    }
+
+    return formatTimestampInTimezone(utcTimestamp, timezone);
   };
 
   return (
@@ -300,7 +353,7 @@ export function NotificationBell({
                               fontFamily: 'var(--font-mono)',
                             }}
                           >
-                            {notification.timestamp?.split(',')[1]?.trim() || notification.timestamp || 'N/A'}
+                            {formatNotificationTimestamp(notification.timestamp)}
                           </div>
                         </div>
                         
@@ -337,11 +390,7 @@ export function NotificationBell({
                 style={{ borderColor: 'rgba(226,232,240,0.9)' }}
               >
                 <button
-                  onClick={() => {
-                    setShowPanel(false);
-                    setActiveTab('logs');
-                    navigate('/threats');
-                  }}
+                  onClick={handleViewAll}
                   className="w-full py-2.5 rounded-full transition-all duration-200"
                   style={{
                     background: 'linear-gradient(135deg, #0EA5E9, #0284C7)',
@@ -409,7 +458,7 @@ export function NotificationBell({
                   {toast.description}
                 </div>
                 <div style={{ fontSize: '0.7rem', color: '#9CA3AF', fontFamily: 'monospace' }}>
-                  {toast.timestamp}
+                  {formatNotificationTimestamp(toast.timestamp)}
                 </div>
               </div>
 

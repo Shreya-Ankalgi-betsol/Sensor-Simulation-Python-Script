@@ -16,7 +16,6 @@ import HeadlessUIDropdown from '../components/HeadlessUIDropdown';
 import CheckboxGroup from '../components/CheckboxGroup';
 import { NotificationBell } from '../components/NotificationBell';
 import { ThreatDetailsModal } from '../components/ThreatDetailsModal';
-
 type ActiveTab = 'live' | 'logs';
 
 type ThreatTableProps = {
@@ -261,7 +260,13 @@ export function Threats() {
   const { setSelectedThreat } = useMapNavigation();
   const { sensorList } = useSensors();
   const { liveThreats, isConnected, connectionStatus } = useWebSocket();
-  const { activeTab: globalActiveTab, setActiveTab: updateGlobalActiveTab } = useActiveTab();
+  const {
+    activeTab: globalActiveTab,
+    setActiveTab: updateGlobalActiveTab,
+    logsRefreshToken,
+    isLiveStreamPaused,
+    setLiveStreamPaused,
+  } = useActiveTab();
   const { timezone } = useTimezone();
   
   // Tab management
@@ -269,7 +274,6 @@ export function Threats() {
   
   // Live Stream Tab State - tracks which threats to display in this tab
   const [liveStreamThreats, setLiveStreamThreats] = useState<ThreatLog[]>([]);
-  const [isStreamPaused, setIsStreamPaused] = useState(false);
   const [streamPauseTimestamp, setStreamPauseTimestamp] = useState<number | null>(null); // Track when stream was paused
   const [liveStreamStats, setLiveStreamStats] = useState({ total: 0, high: 0, active: 0 });
   const [lastThreatTimestamp, setLastThreatTimestamp] = useState<number>(Date.now()); // Track when tab was opened
@@ -280,6 +284,7 @@ export function Threats() {
   const [threatLogSummary, setThreatLogSummary] = useState<ThreatSummaryOut | null>(null);
   const [logLoading, setLogLoading] = useState(true);
   const [logLoadingMore, setLogLoadingMore] = useState(false);
+  const [logsRefreshKey, setLogsRefreshKey] = useState(0);
   
   const [filterTime, setFilterTime] = useState("All");
   const [filterSensorTypes, setFilterSensorTypes] = useState<string[]>([]);
@@ -289,6 +294,25 @@ export function Threats() {
   const [fromDateTime, setFromDateTime] = useState<Date | null>(null)
   const [toDateTime, setToDateTime] = useState<Date | null>(null)
   const [availableThreatTypes, setAvailableThreatTypes] = useState<string[]>([]);
+
+  const resetFilters = () => {
+    setFilterTime("All");
+    setFilterSensorTypes([]);
+    setFilterSensorIds([]);
+    setFilterThreatTypes([]);
+    setFilterSeverities([]);
+    setFromDateTime(null)
+    setToDateTime(null)
+  };
+
+  const triggerLogsRefresh = (resetToDefault: boolean) => {
+    if (resetToDefault) {
+      resetFilters();
+    }
+
+    setNextCursor(null);
+    setLogsRefreshKey((prev) => prev + 1);
+  };
   
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -499,19 +523,43 @@ export function Threats() {
   useEffect(() => {
     setNextCursor(null);
     fetchThreatLogs(null, true);
-  }, [filterTime, filterSensorTypes, filterSensorIds, filterThreatTypes, filterSeverities, fromDateTime, toDateTime]);
+  }, [
+    filterTime,
+    filterSensorTypes,
+    filterSensorIds,
+    filterThreatTypes,
+    filterSeverities,
+    fromDateTime,
+    toDateTime,
+    logsRefreshKey,
+  ]);
 
-  // Honor global tab requests (e.g., View All from notification bell) and refresh logs.
+  // Honor global tab requests (e.g., View All from notification bell).
   useEffect(() => {
     if (globalActiveTab === 'logs' && activeTab !== 'logs') {
       setActiveTab('logs');
-      fetchThreatLogs(null, true);
     }
-  }, [globalActiveTab, activeTab, fetchThreatLogs]);
+  }, [globalActiveTab, activeTab]);
+
+  // Keep global tab state in sync with the current Threats tab.
+  useEffect(() => {
+    if (globalActiveTab !== activeTab) {
+      updateGlobalActiveTab(activeTab);
+    }
+  }, [activeTab, globalActiveTab, updateGlobalActiveTab]);
+
+  // Force a logs refresh when View All is clicked, even if already on logs.
+  useEffect(() => {
+    if (globalActiveTab !== 'logs' || logsRefreshToken === 0) {
+      return;
+    }
+
+    triggerLogsRefresh(true);
+  }, [logsRefreshToken, globalActiveTab]);
 
   // Handle Live Stream data - only show threats received after tab was opened
   useEffect(() => {
-    if (isStreamPaused) return;
+    if (isLiveStreamPaused) return;
 
     if (liveThreats.length === 0) return;
 
@@ -539,14 +587,13 @@ export function Threats() {
           active: prev.active,
         }));
 
-        // Combine threats and sort by timestamp (most recent first)
-        const combined = [...newThreats, ...prevThreats];
-        return combined.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        // Preserve arrival order from the WebSocket (newest-first by receipt).
+        return [...newThreats, ...prevThreats];
       }
 
       return prevThreats;
     });
-  }, [liveThreats, isStreamPaused, lastThreatTimestamp, streamPauseTimestamp]);
+  }, [liveThreats, isLiveStreamPaused, lastThreatTimestamp, streamPauseTimestamp]);
 
   // Handle tab change
   const handleTabChange = (tab: ActiveTab) => {
@@ -558,7 +605,7 @@ export function Threats() {
       setLastThreatTimestamp(Date.now());
       setLiveStreamThreats([]);
       setLiveStreamStats({ total: 0, high: 0, active: 0 });
-      setIsStreamPaused(false);
+      setLiveStreamPaused(false);
       setStreamPauseTimestamp(null);
     }
 
@@ -570,13 +617,13 @@ export function Threats() {
 
   // Handle PAUSE button - pause incoming threats
   const handlePauseStream = () => {
-    setIsStreamPaused(true);
+    setLiveStreamPaused(true);
     setStreamPauseTimestamp(Date.now());
   };
 
   // Handle RESUME button - resume with missed threats and new ones
   const handleResumeStream = () => {
-    setIsStreamPaused(false);
+    setLiveStreamPaused(false);
     setStreamPauseTimestamp(null);
     // The effect will automatically add any new threats that arrived during pause
   };
@@ -666,17 +713,7 @@ export function Threats() {
     }
   };
 
-  const resetFilters = () => {
-    setFilterTime("All");
-    setFilterSensorTypes([]);
-    setFilterSensorIds([]);
-    setFilterThreatTypes([]);
-    setFilterSeverities([]);
-    setFromDateTime(null)
-    setToDateTime(null)
-  };
-
-  // Handle clicking on a threat - show details modal
+  // Handle clicking on a threat - navigate to dashboard with selected threat
   const handleThreatClick = (threat: ThreatLog) => {
     setSelectedThreatForModal(threat);
     setIsModalOpen(true);
@@ -823,14 +860,6 @@ export function Threats() {
 
         {!loading && !error && (
           <>
-            {activeTab === 'logs' && (
-              <NotificationBell
-                liveThreats={liveThreats}
-                enableToasts={false}
-                clearOnMarkAllRead
-              />
-            )}
-
             {/* Page Header with Tabs */}
             <div>
               <div className="flex items-start justify-between gap-4">
@@ -982,7 +1011,7 @@ export function Threats() {
                   }}
                 >
                   <div className="flex items-center gap-2">
-                    {!isStreamPaused && connectionStatus === 'connecting' && (
+                    {!isLiveStreamPaused && connectionStatus === 'connecting' && (
                       <>
                         <div
                           className="w-3 h-3 rounded-full animate-pulse"
@@ -994,7 +1023,7 @@ export function Threats() {
                       </>
                     )}
 
-                    {!isStreamPaused && connectionStatus === 'connected' && (
+                    {!isLiveStreamPaused && connectionStatus === 'connected' && (
                       <>
                         <div
                           className="w-3 h-3 rounded-full animate-pulse"
@@ -1006,7 +1035,7 @@ export function Threats() {
                       </>
                     )}
 
-                    {isStreamPaused && (
+                    {isLiveStreamPaused && (
                       <>
                         <div
                           className="w-3 h-3 rounded-full"
@@ -1046,7 +1075,7 @@ export function Threats() {
                     </button>
 
                     {/* PAUSE/RESUME Buttons */}
-                    {!isStreamPaused ? (
+                    {!isLiveStreamPaused ? (
                       <button
                         onClick={handlePauseStream}
                         style={{
@@ -1099,7 +1128,7 @@ export function Threats() {
                 </div>
 
                 {/* Stream Paused Banner */}
-                {isStreamPaused && (
+                {isLiveStreamPaused && (
                   <div
                     className="rounded-2xl p-2.5"
                     style={{
