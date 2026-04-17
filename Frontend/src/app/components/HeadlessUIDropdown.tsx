@@ -12,6 +12,7 @@ interface HeadlessUIDropdownProps {
   options: DropdownOption[]
   label?: string
   placeholder?: string
+  compact?: boolean
 }
 
 export default function HeadlessUIDropdown({
@@ -20,6 +21,7 @@ export default function HeadlessUIDropdown({
   options,
   label,
   placeholder,
+  compact = false,
 }: HeadlessUIDropdownProps) {
   const selectedLabel = options.find(opt => opt.value === value)?.label || placeholder || 'Select...'
 
@@ -42,20 +44,21 @@ export default function HeadlessUIDropdown({
       )}
       <Menu>
         <MenuButton
-          className="inline-flex items-center justify-between gap-2 rounded-md px-3 py-2 appearance-none cursor-pointer transition-all duration-200"
+          className="inline-flex items-center justify-between gap-2 rounded-md appearance-none cursor-pointer transition-all duration-200"
           style={{
             background: "#FFFFFF",
             border: "1px solid #E2E8F0",
             borderRadius: "6px",
             color: "var(--text-primary)",
-            fontSize: "1.00625rem",
+            fontSize: compact ? "0.72rem" : "1.00625rem",
+            padding: compact ? '3px 8px' : '8px 12px',
             fontFamily: "var(--font-mono)",
             width: "100%",
             minWidth: 0,
           }}
         >
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{selectedLabel}</span>
-          <ChevronDownIcon className="size-4 fill-gray-400 flex-shrink-0" />
+          <ChevronDownIcon className={`${compact ? 'size-3' : 'size-4'} fill-gray-400 flex-shrink-0`} />
         </MenuButton>
 
         <MenuItems
@@ -67,7 +70,7 @@ export default function HeadlessUIDropdown({
             border: '1px solid #E2E8F0',
             borderRadius: '6px',
             marginTop: '4px',
-            minWidth: '300px',
+            minWidth: compact ? '104px' : '300px',
             maxWidth: 'calc(100vw - 24px)',
             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
             zIndex: 9999,
@@ -81,11 +84,12 @@ export default function HeadlessUIDropdown({
             <MenuItem key={option.value}>
               <button
                 onClick={() => onChange(option.value)}
-                className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left transition-colors data-focus:bg-blue-50"
+                className="flex w-full items-center gap-2 rounded text-left transition-colors data-focus:bg-blue-50"
                 style={{
                   color: value === option.value ? '#0284C7' : 'var(--text-primary)',
                   fontWeight: value === option.value ? 600 : 400,
-                  fontSize: "1.00625rem",
+                  fontSize: compact ? '0.78rem' : "1.00625rem",
+                  padding: compact ? '4px 8px' : '6px 12px',
                   fontFamily: "var(--font-mono)",
                   textAlign: 'left',
                   whiteSpace: 'nowrap',
