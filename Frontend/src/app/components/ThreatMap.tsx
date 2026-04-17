@@ -26,6 +26,7 @@ export function ThreatMap({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const sensorLayerRef = useRef<L.LayerGroup | null>(null);
+  const initialMapCenterRef = useRef<[number, number]>([15.8856, 74.52]);
   const sensorListRef = useRef(sensorList); // Keep sensor list in ref to avoid dependency triggers
 
   // Update sensor ref whenever sensorList changes (but don't trigger threat re-render)
@@ -121,6 +122,16 @@ export function ThreatMap({
     return [avgLat, avgLng];
   }, [sensorList]);
 
+  useEffect(() => {
+    if (sensorList.length === 0) {
+      return;
+    }
+
+    const avgLat = sensorList.reduce((sum, sensor) => sum + sensor.lat, 0) / sensorList.length;
+    const avgLng = sensorList.reduce((sum, sensor) => sum + sensor.lng, 0) / sensorList.length;
+    initialMapCenterRef.current = [avgLat, avgLng];
+  }, [sensorList]);
+
   const buildDisplayedPosition = (sensor: { sensor_id: string; lat: number; lng: number }, duplicatesIndex: number) => {
     if (duplicatesIndex === 0) {
       return [sensor.lat, sensor.lng] as [number, number];
@@ -177,7 +188,7 @@ export function ThreatMap({
       zoomControl: true,
       preferCanvas: true,
       maxZoom: 22,
-    }).setView(defaultCenter, 12);
+    }).setView(initialMapCenterRef.current, 12);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 22,
@@ -202,7 +213,7 @@ export function ThreatMap({
       sensorLayerRef.current = null;
       threatLayerRef.current = null;
     };
-  }, [defaultCenter]);
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;

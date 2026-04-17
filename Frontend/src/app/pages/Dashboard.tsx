@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ShieldAlert, X } from 'lucide-react';
 import { ThreatMap } from '../components/ThreatMap';
 import { LiveAlerts } from '../components/LiveAlerts';
 import { ThreatPlaybackTimeline } from '../components/ThreatPlaybackTimeline';
 import { useSensors } from '../context/SensorContext';
+import { useWebSocket } from '../context/WebSocketContext';
 import { useMapNavigation } from '../context/MapNavigationContext';
 import { apiGet, APIError } from '../services/apiClient';
 import { PagedThreats, ThreatLog } from '../types/api';
@@ -14,8 +15,13 @@ const PLAYBACK_DOT_WINDOW_MS = 60 * 1000;
 const PLAYBACK_BUCKET_MS = 5 * 60 * 1000;
 const PLAYBACK_PAGE_SIZE = 500;
 const PLAYBACK_MAX_PAGES = 80;
+const PLAYBACK_RECONCILE_MAX_PAGES = 30;
 const PLAYBACK_TICK_INTERVAL_MS = 200;
 const PLAYBACK_BASE_ADVANCE_MS = 30 * 1000;
+const PLAYBACK_ROLL_INTERVAL_MS = 15 * 1000;
+const PLAYBACK_RECONCILE_INTERVAL_MS = 3 * 60 * 1000;
+const PLAYBACK_RECONCILE_LOOKBACK_MS = 60 * 60 * 1000;
+const PLAYBACK_RECONCILE_OVERLAP_MS = 2 * 60 * 1000;
 
 const buildPlaybackBuckets = (
   threats: ThreatLog[],
@@ -47,6 +53,7 @@ const buildPlaybackBuckets = (
 
 export function Dashboard() {
   const { sensorList } = useSensors();
+  const { liveThreats, connectionStatus } = useWebSocket();
   const { selectedThreat, setSelectedThreat } = useMapNavigation();
 
   const [isPlaybackMode, setIsPlaybackMode] = useState(false);
@@ -58,6 +65,71 @@ export function Dashboard() {
   const [historicalThreats, setHistoricalThreats] = useState<ThreatLog[]>([]);
   const [playbackLoading, setPlaybackLoading] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const processedLiveThreatIdsRef = useRef<Set<string>>(new Set());
+  const playbackLastSyncMsRef = useRef<number | null>(null);
+  const playbackSyncInFlightRef = useRef(false);
+
+  const mergeThreatCollections = useCallback(
+    (base: ThreatLog[], incoming: ThreatLog[], windowEndMs: number) => {
+      const windowStartMs = windowEndMs - PLAYBACK_WINDOW_MS;
+      const mergedById = new Map<string, ThreatLog>();
+
+      const upsertThreat = (threat: ThreatLog) => {
+        const threatMs = new Date(threat.timestamp).getTime();
+        if (!Number.isFinite(threatMs) || threatMs < windowStartMs || threatMs > windowEndMs) {
+          return;
+        }
+
+        const existing = mergedById.get(threat.alert_id);
+        if (!existing || new Date(existing.timestamp).getTime() < threatMs) {
+          mergedById.set(threat.alert_id, threat);
+        }
+      };
+
+      base.forEach(upsertThreat);
+      incoming.forEach(upsertThreat);
+
+      return Array.from(mergedById.values()).sort(
+        (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
+      );
+    },
+    []
+  );
+
+  const fetchThreatRange = useCallback(async (fromMs: number, toMs: number, maxPages: number) => {
+    if (toMs <= fromMs) {
+      return [] as ThreatLog[];
+    }
+
+    const threatsByAlertId = new Map<string, ThreatLog>();
+    let cursor: string | null = null;
+    let hasMore = true;
+    let pagesLoaded = 0;
+
+    while (hasMore && pagesLoaded < maxPages) {
+      const params = new URLSearchParams();
+      params.append('from_dt', new Date(fromMs).toISOString());
+      params.append('to_dt', new Date(toMs).toISOString());
+      params.append('page_size', String(PLAYBACK_PAGE_SIZE));
+
+      if (cursor) {
+        params.append('cursor', cursor);
+      }
+
+      const page = await apiGet<PagedThreats>(`/api/v1/threats?${params.toString()}`);
+      page.items.forEach((threat) => {
+        threatsByAlertId.set(threat.alert_id, threat);
+      });
+
+      cursor = page.next_cursor;
+      hasMore = Boolean(page.has_more && cursor);
+      pagesLoaded += 1;
+    }
+
+    return Array.from(threatsByAlertId.values()).sort(
+      (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
+    );
+  }, []);
 
   const fetchPlaybackThreats = useCallback(async () => {
     setPlaybackLoading(true);
@@ -65,40 +137,16 @@ export function Dashboard() {
 
     const endMs = Date.now();
     const startMs = endMs - PLAYBACK_WINDOW_MS;
-    const threatsByAlertId = new Map<string, ThreatLog>();
-    let cursor: string | null = null;
-    let hasMore = true;
-    let pagesLoaded = 0;
 
     try {
-      while (hasMore && pagesLoaded < PLAYBACK_MAX_PAGES) {
-        const params = new URLSearchParams();
-        params.append('from_dt', new Date(startMs).toISOString());
-        params.append('to_dt', new Date(endMs).toISOString());
-        params.append('page_size', String(PLAYBACK_PAGE_SIZE));
-
-        if (cursor) {
-          params.append('cursor', cursor);
-        }
-
-        const page = await apiGet<PagedThreats>(`/api/v1/threats?${params.toString()}`);
-        page.items.forEach((threat) => {
-          threatsByAlertId.set(threat.alert_id, threat);
-        });
-
-        cursor = page.next_cursor;
-        hasMore = Boolean(page.has_more && cursor);
-        pagesLoaded += 1;
-      }
-
-      const sortedThreats = Array.from(threatsByAlertId.values()).sort(
-        (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
-      );
+      const sortedThreats = await fetchThreatRange(startMs, endMs, PLAYBACK_MAX_PAGES);
 
       setHistoricalThreats(sortedThreats);
       setPlaybackWindowStartMs(startMs);
       setPlaybackWindowEndMs(endMs);
       setPlaybackCursorMs(startMs);
+      processedLiveThreatIdsRef.current = new Set(sortedThreats.map((threat) => threat.alert_id));
+      playbackLastSyncMsRef.current = endMs;
       return true;
     } catch (error) {
       const message = error instanceof APIError ? error.message : 'Unable to load playback history.';
@@ -107,7 +155,7 @@ export function Dashboard() {
     } finally {
       setPlaybackLoading(false);
     }
-  }, []);
+  }, [fetchThreatRange]);
 
   const handleStartPlayback = useCallback(async () => {
     setIsPlaybackMode(true);
@@ -129,6 +177,9 @@ export function Dashboard() {
     setPlaybackError(null);
     setPlaybackCursorMs(null);
     setHistoricalThreats([]);
+    processedLiveThreatIdsRef.current.clear();
+    playbackLastSyncMsRef.current = null;
+    playbackSyncInFlightRef.current = false;
   }, []);
 
   const handleModeToggle = useCallback(
@@ -196,6 +247,134 @@ export function Dashboard() {
       window.clearInterval(tick);
     };
   }, [isPlaybackMode, isPlaybackRunning, playbackCursorMs, playbackSpeed, playbackWindowEndMs]);
+
+  useEffect(() => {
+    if (!isPlaybackMode) {
+      return;
+    }
+
+    const rollWindow = window.setInterval(() => {
+      const nowMs = Date.now();
+      setPlaybackWindowEndMs(nowMs);
+      setPlaybackWindowStartMs(nowMs - PLAYBACK_WINDOW_MS);
+      setHistoricalThreats((previous) => mergeThreatCollections(previous, [], nowMs));
+      setPlaybackCursorMs((previous) => {
+        if (previous === null) {
+          return previous;
+        }
+
+        const windowStartMs = nowMs - PLAYBACK_WINDOW_MS;
+        return Math.min(nowMs, Math.max(windowStartMs, previous));
+      });
+    }, PLAYBACK_ROLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(rollWindow);
+    };
+  }, [isPlaybackMode, mergeThreatCollections]);
+
+  useEffect(() => {
+    if (!isPlaybackMode || liveThreats.length === 0) {
+      return;
+    }
+
+    const knownIds = processedLiveThreatIdsRef.current;
+    const incomingFromSocket: ThreatLog[] = [];
+
+    for (const threat of liveThreats) {
+      if (knownIds.has(threat.alert_id)) {
+        break;
+      }
+      incomingFromSocket.push(threat);
+    }
+
+    if (incomingFromSocket.length === 0) {
+      return;
+    }
+
+    incomingFromSocket.forEach((threat) => {
+      knownIds.add(threat.alert_id);
+    });
+
+    const nowMs = Date.now();
+    setPlaybackWindowEndMs(nowMs);
+    setPlaybackWindowStartMs(nowMs - PLAYBACK_WINDOW_MS);
+    setHistoricalThreats((previous) => mergeThreatCollections(previous, incomingFromSocket, nowMs));
+
+    const latestIncomingMs = Math.max(
+      ...incomingFromSocket.map((threat) => new Date(threat.timestamp).getTime()).filter(Number.isFinite)
+    );
+    if (Number.isFinite(latestIncomingMs)) {
+      playbackLastSyncMsRef.current = Math.max(playbackLastSyncMsRef.current ?? 0, latestIncomingMs);
+    }
+  }, [isPlaybackMode, liveThreats, mergeThreatCollections]);
+
+  useEffect(() => {
+    if (!isPlaybackMode) {
+      return;
+    }
+
+    processedLiveThreatIdsRef.current = new Set(historicalThreats.map((threat) => threat.alert_id));
+  }, [historicalThreats, isPlaybackMode]);
+
+  const reconcilePlaybackThreats = useCallback(async () => {
+    if (!isPlaybackMode || playbackSyncInFlightRef.current) {
+      return;
+    }
+
+    playbackSyncInFlightRef.current = true;
+    const nowMs = Date.now();
+    const windowStartMs = nowMs - PLAYBACK_WINDOW_MS;
+    const fallbackStartMs = nowMs - PLAYBACK_RECONCILE_LOOKBACK_MS;
+    const lastSyncMs = playbackLastSyncMsRef.current;
+    const fromMs = Math.max(
+      windowStartMs,
+      (lastSyncMs ?? fallbackStartMs) - PLAYBACK_RECONCILE_OVERLAP_MS
+    );
+
+    try {
+      const incrementalThreats = await fetchThreatRange(fromMs, nowMs, PLAYBACK_RECONCILE_MAX_PAGES);
+      setPlaybackWindowEndMs(nowMs);
+      setPlaybackWindowStartMs(windowStartMs);
+      setHistoricalThreats((previous) => mergeThreatCollections(previous, incrementalThreats, nowMs));
+
+      incrementalThreats.forEach((threat) => {
+        processedLiveThreatIdsRef.current.add(threat.alert_id);
+      });
+
+      const latestIncrementalMs = Math.max(
+        ...incrementalThreats.map((threat) => new Date(threat.timestamp).getTime()).filter(Number.isFinite),
+        nowMs
+      );
+      playbackLastSyncMsRef.current = latestIncrementalMs;
+    } catch (error) {
+      console.warn('[Dashboard] Playback reconciliation failed:', error);
+    } finally {
+      playbackSyncInFlightRef.current = false;
+    }
+  }, [fetchThreatRange, isPlaybackMode, mergeThreatCollections]);
+
+  useEffect(() => {
+    if (!isPlaybackMode) {
+      return;
+    }
+
+    const reconcileInterval = window.setInterval(() => {
+      void reconcilePlaybackThreats();
+    }, PLAYBACK_RECONCILE_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(reconcileInterval);
+    };
+  }, [isPlaybackMode, reconcilePlaybackThreats]);
+
+  useEffect(() => {
+    if (!isPlaybackMode || connectionStatus !== 'connected') {
+      return;
+    }
+
+    void reconcilePlaybackThreats();
+  }, [connectionStatus, isPlaybackMode, reconcilePlaybackThreats]);
 
   const playbackBuckets = useMemo(
     () => buildPlaybackBuckets(historicalThreats, playbackWindowStartMs, playbackWindowEndMs, PLAYBACK_BUCKET_MS),
