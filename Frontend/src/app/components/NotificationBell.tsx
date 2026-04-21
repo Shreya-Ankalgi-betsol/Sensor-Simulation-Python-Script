@@ -21,6 +21,7 @@ interface NotificationBellProps {
   enableToasts?: boolean;
   clearOnMarkAllRead?: boolean;
   isViewingLiveStream?: boolean;
+  enablePanel?: boolean;
 }
 
 export function NotificationBell({
@@ -28,6 +29,7 @@ export function NotificationBell({
   enableToasts = true,
   clearOnMarkAllRead = false,
   isViewingLiveStream = false,
+  enablePanel = true,
 }: NotificationBellProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -72,6 +74,12 @@ export function NotificationBell({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!enablePanel && showPanel) {
+      setShowPanel(false);
+    }
+  }, [enablePanel, showPanel]);
 
   useEffect(() => {
     if (!isViewingLiveStream) return;
@@ -194,7 +202,12 @@ export function NotificationBell({
         style={{ top: '20px', right: '20px' }}
       >
         <button
-          onClick={() => setShowPanel(!showPanel)}
+          onClick={() => {
+            if (!enablePanel) {
+              return;
+            }
+            setShowPanel((prev) => !prev);
+          }}
           className="relative p-2 rounded-2xl transition-all duration-200 shadow-sm"
           style={{
             background: isAlerting ? 'rgba(220,38,38,0.12)' : 'rgba(255,255,255,0.95)',
@@ -233,7 +246,7 @@ export function NotificationBell({
         </button>
 
         {/* Notification Panel Dropdown */}
-        {showPanel && (
+        {enablePanel && showPanel && (
           <>
             {/* Backdrop */}
             <div

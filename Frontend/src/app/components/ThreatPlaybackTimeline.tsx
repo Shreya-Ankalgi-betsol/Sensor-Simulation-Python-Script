@@ -212,6 +212,16 @@ export function ThreatPlaybackTimeline({
                     {formatTimelineHourLabel(tickMs)}
                   </span>
                 ))}
+                <span
+                  className="absolute right-0 top-0 whitespace-nowrap"
+                  style={{
+                    transform: 'translateX(16px)',
+                    color: '#0369A1',
+                    fontWeight: 700,
+                  }}
+                >
+                  Now
+                </span>
               </div>
               <input
                 type="range"

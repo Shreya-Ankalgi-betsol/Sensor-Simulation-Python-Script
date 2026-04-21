@@ -10,12 +10,13 @@ import {
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { ChevronDown, MoreVertical, Plus, RotateCcw } from "lucide-react";
+import { MoreVertical, Plus, RotateCcw } from "lucide-react";
 import { PencilIcon, MapPinIcon } from "@heroicons/react/16/solid";
 import { useSensors } from "../context/SensorContext";
 import { useMapNavigation } from "../context/MapNavigationContext";
 import { useTimezone } from "../context/TimezoneContext";
 import { formatTimestampInTimezone } from "../services/timezoneUtils";
+import HeadlessUIDropdown from "../components/HeadlessUIDropdown";
 
 export function Sensors() {
   const navigate = useNavigate();
@@ -43,7 +44,6 @@ export function Sensors() {
     total: sensorList.length,
     active: sensorList.filter((s) => s.status === "active").length,
     inactive: sensorList.filter((s) => s.status === "inactive").length,
-    error: sensorList.filter((s) => s.status === "error").length,
   }; // Force recompile
 
   const getStatusColor = (status: string) => {
@@ -58,6 +58,15 @@ export function Sensors() {
         return "#6B7280";
     }
   };
+
+  const disabledFieldStyle = {
+    background: '#F1F5F9',
+    border: '1px solid var(--border-color)',
+    color: '#94A3B8',
+    WebkitTextFillColor: '#94A3B8',
+    cursor: 'not-allowed',
+    opacity: 1,
+  } as const;
 
   const openAddModal = () => {
     setFormData({
@@ -265,7 +274,7 @@ export function Sensors() {
 
       {!loading && !error && (
         <>
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-3 gap-3">
         {[
           {
             label: "Total Sensors",
@@ -281,11 +290,6 @@ export function Sensors() {
             label: "Inactive",
             value: stats.inactive,
             color: "#6B7280",
-          },
-          {
-            label: "Error",
-            value: stats.error,
-            color: "#DC2626",
           },
         ].map((stat) => (
           <div
@@ -694,30 +698,19 @@ export function Sensors() {
               <Label htmlFor="type" style={{ color: "var(--text-secondary)" }}>
                 Type
               </Label>
-              <div className="relative mt-1">
-                <select
-                  id="type"
+              <div className="mt-1">
+                <HeadlessUIDropdown
                   value={formData.sensor_type}
-                  onChange={(e) =>
+                  onChange={(value) =>
                     setFormData({
                       ...formData,
-                      sensor_type: e.target.value as "radar" | "lidar",
+                      sensor_type: value as "radar" | "lidar",
                     })
                   }
-                  className="w-full appearance-none px-3 py-2 pr-10 rounded cursor-pointer"
-                  style={{
-                    background: "var(--bg-primary)",
-                    border: "1px solid var(--border-color)",
-                    color: "var(--text-primary)",
-                  }}
-                >
-                  <option value="radar">Radar</option>
-                  <option value="lidar">Lidar</option>
-                </select>
-                <ChevronDown
-                  size={16}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: "var(--accent-cyan)" }}
+                  options={[
+                    { value: "radar", label: "Radar" },
+                    { value: "lidar", label: "Lidar" },
+                  ]}
                 />
               </div>
             </div>
@@ -775,6 +768,15 @@ export function Sensors() {
                   border: "1px solid var(--border-color)",
                   color: "var(--text-primary)",
                 }}
+                onFocus={(e) => {
+                  if (e.currentTarget.value === '0') {
+                    e.currentTarget.select();
+                  }
+                  e.currentTarget.style.borderColor = "var(--accent-cyan)";
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = "var(--border-color)";
+                }}
               />
             </div>
 
@@ -805,6 +807,15 @@ export function Sensors() {
                   border: "1px solid var(--border-color)",
                   color: "var(--text-primary)",
                 }}
+                onFocus={(e) => {
+                  if (e.currentTarget.value === '0') {
+                    e.currentTarget.select();
+                  }
+                  e.currentTarget.style.borderColor = "var(--accent-cyan)";
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = "var(--border-color)";
+                }}
               />
             </div>
 
@@ -833,6 +844,15 @@ export function Sensors() {
                   background: "var(--bg-primary)",
                   border: "1px solid var(--border-color)",
                   color: "var(--text-primary)",
+                }}
+                onFocus={(e) => {
+                  if (e.currentTarget.value === '50' || e.currentTarget.value === '50.0') {
+                    e.currentTarget.select();
+                  }
+                  e.currentTarget.style.borderColor = "var(--accent-cyan)";
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = "var(--border-color)";
                 }}
               />
             </div>
@@ -963,12 +983,7 @@ export function Sensors() {
                 value={formData.sensor_id}
                 disabled
                 className="mt-1"
-                style={{
-                  background: "#F1F5F9",
-                  border: "1px solid var(--border-color)",
-                  color: "#94A3B8",
-                  cursor: "not-allowed",
-                }}
+                style={disabledFieldStyle}
               />
             </div>
 
@@ -977,25 +992,15 @@ export function Sensors() {
               <Label style={{ color: "var(--text-secondary)" }}>
                 Type
               </Label>
-              <div className="relative mt-1">
-                <select
+              <div className="mt-1">
+                <HeadlessUIDropdown
                   value={formData.sensor_type}
+                  onChange={() => {}}
+                  options={[
+                    { value: "radar", label: "Radar" },
+                    { value: "lidar", label: "Lidar" },
+                  ]}
                   disabled
-                  className="w-full appearance-none px-3 py-2 pr-10 rounded"
-                  style={{
-                    background: "#F1F5F9",
-                    border: "1px solid var(--border-color)",
-                    color: "#94A3B8",
-                    cursor: "not-allowed",
-                  }}
-                >
-                  <option value="radar">Radar</option>
-                  <option value="lidar">Lidar</option>
-                </select>
-                <ChevronDown
-                  size={16}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: "#94A3B8" }}
                 />
               </div>
             </div>
@@ -1061,6 +1066,9 @@ export function Sensors() {
                   color: "var(--text-primary)",
                 }}
                 onFocus={(e) => {
+                  if (e.currentTarget.value === '0') {
+                    e.currentTarget.select();
+                  }
                   e.currentTarget.style.borderColor = "var(--accent-cyan)";
                 }}
                 onBlur={(e) => {
@@ -1098,6 +1106,9 @@ export function Sensors() {
                   color: "var(--text-primary)",
                 }}
                 onFocus={(e) => {
+                  if (e.currentTarget.value === '0') {
+                    e.currentTarget.select();
+                  }
                   e.currentTarget.style.borderColor = "var(--accent-cyan)";
                 }}
                 onBlur={(e) => {
@@ -1134,6 +1145,9 @@ export function Sensors() {
                   color: "var(--text-primary)",
                 }}
                 onFocus={(e) => {
+                  if (e.currentTarget.value === '50' || e.currentTarget.value === '50.0') {
+                    e.currentTarget.select();
+                  }
                   e.currentTarget.style.borderColor = "var(--accent-cyan)";
                 }}
                 onBlur={(e) => {

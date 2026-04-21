@@ -13,6 +13,7 @@ interface HeadlessUIDropdownProps {
   label?: string
   placeholder?: string
   compact?: boolean
+  disabled?: boolean
 }
 
 export default function HeadlessUIDropdown({
@@ -22,6 +23,7 @@ export default function HeadlessUIDropdown({
   label,
   placeholder,
   compact = false,
+  disabled = false,
 }: HeadlessUIDropdownProps) {
   const selectedLabel = options.find(opt => opt.value === value)?.label || placeholder || 'Select...'
 
@@ -44,23 +46,28 @@ export default function HeadlessUIDropdown({
       )}
       <Menu>
         <MenuButton
+          disabled={disabled}
           className="inline-flex items-center justify-between gap-2 rounded-md appearance-none cursor-pointer transition-all duration-200"
           style={{
-            background: "#FFFFFF",
-            border: "1px solid #E2E8F0",
+            background: disabled ? '#F1F5F9' : '#FFFFFF',
+            border: disabled ? '1px solid var(--border-color)' : '1px solid #E2E8F0',
             borderRadius: "6px",
-            color: "var(--text-primary)",
+            color: disabled ? '#94A3B8' : 'var(--text-primary)',
             fontSize: compact ? "0.72rem" : "1.00625rem",
             padding: compact ? '3px 8px' : '8px 12px',
             fontFamily: "var(--font-mono)",
             width: "100%",
             minWidth: 0,
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            opacity: 1,
+            WebkitTextFillColor: disabled ? '#94A3B8' : undefined,
           }}
         >
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{selectedLabel}</span>
-          <ChevronDownIcon className={`${compact ? 'size-3' : 'size-4'} fill-gray-400 flex-shrink-0`} />
+          <ChevronDownIcon className={`${compact ? 'size-3' : 'size-4'} flex-shrink-0`} style={{ fill: disabled ? '#94A3B8' : '#9CA3AF' }} />
         </MenuButton>
 
+        {!disabled && (
         <MenuItems
           transition
           anchor="bottom start"
@@ -103,6 +110,7 @@ export default function HeadlessUIDropdown({
             </MenuItem>
           ))}
         </MenuItems>
+        )}
       </Menu>
     </div>
   )

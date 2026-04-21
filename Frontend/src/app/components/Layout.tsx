@@ -112,6 +112,7 @@ export function Layout() {
   }[connectionStatus];
 
   const isViewingLiveStream = activeTab === 'live' && !isLiveStreamPaused;
+  const isDashboardRoute = location.pathname === '/';
 
   return (
     <div
@@ -125,6 +126,7 @@ export function Layout() {
         enableToasts={false}
         clearOnMarkAllRead
         isViewingLiveStream={isViewingLiveStream}
+        enablePanel={!isDashboardRoute}
       />
       {/* Sidebar */}
       <aside
@@ -173,23 +175,6 @@ export function Layout() {
               </button>
             </div>
 
-            {sidebarOpen && (
-              <div
-                className="mt-4 rounded-xl border px-3 py-2"
-                style={{
-                  background: 'rgba(15, 23, 42, 0.5)',
-                  borderColor: 'rgba(255,255,255,0.08)',
-                }}
-              >
-                <div className="text-[0.68rem] uppercase tracking-[0.22em]" style={{ color: 'rgba(226,232,240,0.6)' }}>
-                  System Status
-                </div>
-                <div className="mt-1 flex items-center gap-2 text-sm font-medium" style={{ color: '#F8FAFC' }}>
-                  <statusMeta.icon size={16} color={statusMeta.tone} />
-                  {statusMeta.label}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Navigation Items */}

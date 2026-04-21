@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AlertTriangle, User, Flame, Sword, Activity } from 'lucide-react';
 import { useWebSocket } from '../context/WebSocketContext';
+import { useTimezone } from '../context/TimezoneContext';
 import { ThreatLog } from '../types/api';
 
 interface LiveAlert extends ThreatLog {
@@ -13,6 +14,7 @@ interface LiveAlertsProps {
 
 export function LiveAlerts({ onAlertClick }: LiveAlertsProps) {
   const { liveThreats, connectionStatus } = useWebSocket();
+  const { timezone } = useTimezone();
   const [displayAlerts, setDisplayAlerts] = useState<LiveAlert[]>([]);
 
   // Update display alerts when live threats change
@@ -77,6 +79,29 @@ export function LiveAlerts({ onAlertClick }: LiveAlertsProps) {
     connected: { label: 'Live', tone: '#16A34A' },
     disconnected: { label: 'Offline', tone: '#DC2626' },
   }[connectionStatus];
+
+  const formatTimestampParts = (timestamp: string) => {
+    const parsed = new Date(timestamp);
+    if (Number.isNaN(parsed.getTime())) {
+      return { dateText: 'N/A', timeText: '' };
+    }
+
+    return {
+      dateText: parsed.toLocaleDateString('en-US', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }),
+      timeText: parsed.toLocaleTimeString([], {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      }),
+    };
+  };
 
   return (
     <div
@@ -152,6 +177,7 @@ export function LiveAlerts({ onAlertClick }: LiveAlertsProps) {
           displayAlerts.map((alert, index) => {
             const severityColor = getSeverityColor(alert.severity);
             const severityBgColor = getSeverityBgColor(alert.severity);
+            const { dateText, timeText } = formatTimestampParts(alert.timestamp);
             
             return (
               <div
@@ -193,7 +219,7 @@ export function LiveAlerts({ onAlertClick }: LiveAlertsProps) {
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 mb-1">
+                    <div className="flex items-start justify-between gap-2 mb-0.5">
                       <h4
                         className="font-heading uppercase"
                         style={{
@@ -221,7 +247,7 @@ export function LiveAlerts({ onAlertClick }: LiveAlertsProps) {
                     </div>
 
                     <div
-                      className="flex items-center gap-2 overflow-hidden whitespace-nowrap"
+                      className="flex items-start gap-2 overflow-hidden"
                       style={{
                         fontSize: 'var(--fs-2)',
                         fontWeight: 600,
@@ -233,9 +259,16 @@ export function LiveAlerts({ onAlertClick }: LiveAlertsProps) {
                         {alert.sensor_id}
                       </span>
                       <span className="shrink-0" style={{ color: 'var(--text-secondary)' }}>&middot;</span>
-                      <span className="truncate" style={{ color: 'var(--text-primary)', fontSize: 'var(--fs-1)' }}>
-                        {new Date(alert.timestamp).toLocaleString()}
-                      </span>
+                      <div className="min-w-0 leading-tight" style={{ color: 'var(--text-primary)' }}>
+                        <div className="truncate" style={{ fontSize: 'var(--fs-1)' }}>
+                          {dateText}
+                        </div>
+                        {timeText && (
+                          <div className="truncate" style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>
+                            {timeText}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
