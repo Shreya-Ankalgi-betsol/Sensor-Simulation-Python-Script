@@ -1,4 +1,5 @@
 import base64
+import binascii
 import json
 from datetime import datetime
 
@@ -14,6 +15,8 @@ from app.schemas.threat import PagedThreats, ThreatFilter, ThreatOut
 
 
 class ThreatService:
+    _MIN_PAGE_SIZE = 1
+    _MAX_PAGE_SIZE = 200
 
     # Cursor encoding / decoding 
 
@@ -25,15 +28,59 @@ class ThreatService:
         return base64.urlsafe_b64encode(raw.encode()).decode()
 
     def _decode_cursor(self, cursor: str) -> tuple[datetime, str]:
-        raw = base64.urlsafe_b64decode(cursor.encode()).decode()
-        data = json.loads(raw)
-        return datetime.fromisoformat(data["timestamp"]), data["alert_id"]
+        try:
+            raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+            data = json.loads(raw)
+            return datetime.fromisoformat(data["timestamp"]), data["alert_id"]
+        except (ValueError, KeyError, json.JSONDecodeError, binascii.Error) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid cursor",
+            ) from exc
+
+    def _normalize_severities(
+        self, severities: list[str] | None
+    ) -> list[ThreatSeverity] | None:
+        if severities is None:
+            return None
+
+        normalized: list[ThreatSeverity] = []
+        for value in severities:
+            try:
+                normalized.append(ThreatSeverity(str(value).lower()))
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid severity value: {value}. Allowed: low, med, high.",
+                ) from exc
+
+        return normalized
+
+    def _validate_page_size(self, page_size: int) -> int:
+        if not isinstance(page_size, int):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid page_size",
+            )
+
+        if page_size < self._MIN_PAGE_SIZE or page_size > self._MAX_PAGE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Invalid page_size. Allowed range: "
+                    f"{self._MIN_PAGE_SIZE}-{self._MAX_PAGE_SIZE}."
+                ),
+            )
+
+        return page_size
 
     #  Get threats (filtered + cursor paginated) 
     async def get_threats(
         self, filters: ThreatFilter, db: AsyncSession
     ) -> PagedThreats:
         query = select(ThreatLog)
+        normalized_severity = self._normalize_severities(filters.severity)
+        page_size = self._validate_page_size(filters.page_size)
 
         # Apply filters - use .in_() for multi-select support
         if filters.sensor_type is not None and len(filters.sensor_type) > 0:
@@ -42,8 +89,8 @@ class ThreatService:
             query = query.where(ThreatLog.sensor_id.in_(filters.sensor_id))
         if filters.threat_type is not None and len(filters.threat_type) > 0:
             query = query.where(ThreatLog.threat_type.in_(filters.threat_type))
-        if filters.severity is not None and len(filters.severity) > 0:
-            query = query.where(ThreatLog.severity.in_(filters.severity))
+        if normalized_severity is not None and len(normalized_severity) > 0:
+            query = query.where(ThreatLog.severity.in_(normalized_severity))
         if filters.from_dt is not None:
             query = query.where(ThreatLog.timestamp >= filters.from_dt)
         if filters.to_dt is not None:
@@ -70,7 +117,7 @@ class ThreatService:
         if filters.to_dt is not None:
             high_severity_query = high_severity_query.where(ThreatLog.timestamp <= filters.to_dt)
         # If user filtered by severity AND it's not "high", then high severity count is 0
-        if filters.severity is not None and len(filters.severity) > 0 and ThreatSeverity.high not in [ThreatSeverity(s) for s in filters.severity]:
+        if normalized_severity is not None and len(normalized_severity) > 0 and ThreatSeverity.high not in normalized_severity:
             high_severity_count = 0
         else:
             high_severity_count_query = select(func.count()).select_from(high_severity_query.subquery())
@@ -99,7 +146,7 @@ class ThreatService:
         query = (
             query
             .order_by(ThreatLog.timestamp.desc(), ThreatLog.alert_id.desc())
-            .limit(filters.page_size)
+            .limit(page_size)
         )
 
         result = await db.execute(query)
@@ -107,7 +154,7 @@ class ThreatService:
 
         # Build next cursor from last item
         next_cursor = None
-        if len(threats) == filters.page_size:
+        if len(threats) == page_size:
             last = threats[-1]
             next_cursor = self._encode_cursor(last.timestamp, last.alert_id)
 

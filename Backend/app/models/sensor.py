@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, Float, String, func
+from sqlalchemy import DateTime, Enum, Float, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.sensor_reading import LidarReading, RadarReading
@@ -25,6 +25,9 @@ class SensorStatus(str, enum.Enum):
 
 class Sensor(Base):
     __tablename__ = "sensors"
+    __table_args__ = (
+        UniqueConstraint("lat", "lng", name="uq_sensors_lat_lng"),
+    )
 
     sensor_id: Mapped[str] = mapped_column(String, primary_key=True)
     sensor_type: Mapped[SensorType] = mapped_column(Enum(SensorType), nullable=False)

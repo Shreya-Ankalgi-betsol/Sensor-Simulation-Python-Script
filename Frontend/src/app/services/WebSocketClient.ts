@@ -2,6 +2,7 @@ import { WS_URL } from './apiClient'
 import { WebSocketMessage, NewThreatMessage, SensorUpdateMessage } from '../types/api'
 
 export type WSMessage = NewThreatMessage | SensorUpdateMessage | WebSocketMessage
+export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected'
 
 // ─────────────────────────────────────────────
 // WebSocketService
@@ -10,6 +11,7 @@ export type WSMessage = NewThreatMessage | SensorUpdateMessage | WebSocketMessag
 // ─────────────────────────────────────────────
 export class WebSocketService {
   private listeners: ((message: WSMessage) => void)[] = []
+  private statusListeners: ((status: ConnectionStatus) => void)[] = []
   private ws: WebSocket | null = null
   private isConnected = false
   private reconnectAttempt = 0
@@ -32,6 +34,7 @@ export class WebSocketService {
     }
 
     console.log('[WebSocket] Connecting to', WS_URL)
+    this.emitStatus('connecting')
 
     try {
       this.ws = new WebSocket(WS_URL)
@@ -40,6 +43,7 @@ export class WebSocketService {
         console.log('[WebSocket] Connected')
         this.isConnected = true
         this.reconnectAttempt = 0
+        this.emitStatus('connected')
 
         // Send any queued messages
         while (this.messageQueue.length > 0) {
@@ -62,12 +66,14 @@ export class WebSocketService {
 
       this.ws.onerror = (error) => {
         console.error('[WebSocket] Error:', error)
+        this.emitStatus('disconnected')
       }
 
       this.ws.onclose = () => {
         console.log('[WebSocket] Disconnected')
         this.isConnected = false
         this.ws = null
+        this.emitStatus('disconnected')
 
         // Auto-reconnect with exponential backoff
         if (this.reconnectAttempt < 30) {
@@ -96,7 +102,9 @@ export class WebSocketService {
       this.ws = null
     }
     this.isConnected = false
+    this.emitStatus('disconnected')
     this.listeners = []
+    this.statusListeners = []
     console.log('[WebSocket] Disconnected')
   }
 
@@ -110,6 +118,13 @@ export class WebSocketService {
     // Return unsubscribe function
     return () => {
       this.listeners = this.listeners.filter((l) => l !== listener)
+    }
+  }
+
+  onStatusChange(listener: (status: ConnectionStatus) => void) {
+    this.statusListeners.push(listener)
+    return () => {
+      this.statusListeners = this.statusListeners.filter((l) => l !== listener)
     }
   }
 
@@ -143,6 +158,16 @@ export class WebSocketService {
         listener(message)
       } catch (error) {
         console.error('[WebSocket] Listener error:', error)
+      }
+    })
+  }
+
+  private emitStatus(status: ConnectionStatus) {
+    this.statusListeners.forEach((listener) => {
+      try {
+        listener(status)
+      } catch (error) {
+        console.error('[WebSocket] Status listener error:', error)
       }
     })
   }

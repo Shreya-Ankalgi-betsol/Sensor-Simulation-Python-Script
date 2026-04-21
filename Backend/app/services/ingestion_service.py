@@ -23,7 +23,8 @@ class IngestionService:
         payload: SensorIngestPayload,
         db: AsyncSession,
     ) -> SensorIngestResponse:
-        sensor = await self._upsert_sensor(payload, db)
+        server_now = datetime.now(UTC)
+        sensor = await self._upsert_sensor(payload, db, server_now)
 
         # Log TCP payload reception
         log_tcp_payload_received(payload.sensor_id, payload.type)
@@ -69,7 +70,7 @@ class IngestionService:
                 }
                 await threat_service.push_alert(alert_data, db)
 
-            sensor.last_ping = payload.timestamp
+            sensor.last_ping = server_now
             sensor.status = SensorStatus.active
 
             await self._mark_stale_sensors_inactive(db)
@@ -107,7 +108,12 @@ class IngestionService:
     async def mark_stale_sensors_inactive(self, db: AsyncSession) -> None:
         await self._mark_stale_sensors_inactive(db)
 
-    async def _upsert_sensor(self, payload: SensorIngestPayload, db: AsyncSession) -> Sensor:
+    async def _upsert_sensor(
+        self,
+        payload: SensorIngestPayload,
+        db: AsyncSession,
+        server_now: datetime,
+    ) -> Sensor:
         sensor = await db.get(Sensor, payload.sensor_id)
 
         if sensor is None:
@@ -119,7 +125,7 @@ class IngestionService:
                 lng=payload.lng if payload.lng is not None else 0.0,
                 location=payload.location or "Unknown",
                 coverage_radius_m=50.0,
-                last_ping=payload.timestamp,
+                last_ping=server_now,
             )
             db.add(sensor)
             await db.flush()

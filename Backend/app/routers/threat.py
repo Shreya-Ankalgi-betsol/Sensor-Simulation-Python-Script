@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.schemas.threat import  PagedThreats, ThreatFilter
+from app.schemas.threat import PagedThreats, ThreatFilter
 from app.services.threat_service import threat_service
-from app.schemas.threat import PagedThreats, ThreatFilter, ThreatSummaryOut
+from app.models.threat_log import ThreatSeverity
 
 router = APIRouter(
     prefix="/api/v1/threats",
@@ -30,9 +30,23 @@ async def get_threats(
     from_dt: str | None = None,
     to_dt: str | None = None,
     cursor: str | None = None,
-    page_size: int = 20,
+    page_size: int = Query(20, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ) -> PagedThreats:
+    if severity:
+        normalized_severity = [str(value).lower() for value in severity]
+        allowed = {item.value for item in ThreatSeverity}
+        invalid = [value for value in normalized_severity if value not in allowed]
+        if invalid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Invalid severity value(s): "
+                    f"{', '.join(invalid)}. Allowed: {', '.join(sorted(allowed))}."
+                ),
+            )
+        severity = normalized_severity
+
     filters = ThreatFilter(
         sensor_type=sensor_type,
         sensor_id=sensor_id,

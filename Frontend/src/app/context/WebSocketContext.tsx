@@ -23,6 +23,7 @@ const WebSocketContext = createContext<WebSocketContextType>({
 })
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
+  const maxLiveThreats = 500
   const [liveThreats, setLiveThreats] = useState<ThreatLog[]>([])
   const [threatSummary, setThreatSummary] = useState<ThreatSummaryOut | null>(null)
   const [isConnected, setIsConnected] = useState(false)
@@ -32,13 +33,14 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     // Auto-connect on mount and keep connection always open
     console.log('[WebSocket] Auto-connecting on app load')
     mockWS.connect()
-    setConnectionStatus('connecting')
+
+    const unsubscribeStatus = mockWS.onStatusChange((status) => {
+      setConnectionStatus(status)
+      setIsConnected(status === 'connected')
+    })
 
     // Listen for incoming messages
     const unsubscribe = mockWS.onMessage((message: WSMessage) => {
-      setConnectionStatus('connected')
-      setIsConnected(true)
-
       if (message.type === 'CONNECTION_CONFIRMED') {
         return
       }
@@ -61,7 +63,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
           if (prev.some((t) => t.alert_id === message.payload.alert_id)) {
             return prev
           }
-          return [message.payload, ...prev]
+          return [message.payload, ...prev].slice(0, maxLiveThreats)
         })
       }
     })
@@ -69,6 +71,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     // Cleanup on unmount - do NOT disconnect to keep connection alive
     return () => {
       unsubscribe()
+      unsubscribeStatus()
     }
   }, [])
 
