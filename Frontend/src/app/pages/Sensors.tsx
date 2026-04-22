@@ -702,15 +702,16 @@ export function Sensors() {
                 <HeadlessUIDropdown
                   value={formData.sensor_type}
                   onChange={(value) =>
-                    setFormData({
-                      ...formData,
+                    setFormData((previous) => ({
+                      ...previous,
                       sensor_type: value as "radar" | "lidar",
-                    })
+                    }))
                   }
                   options={[
                     { value: "radar", label: "Radar" },
                     { value: "lidar", label: "Lidar" },
                   ]}
+                  renderInline
                 />
               </div>
             </div>

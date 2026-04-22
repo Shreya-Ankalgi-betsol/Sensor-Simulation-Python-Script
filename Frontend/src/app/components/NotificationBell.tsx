@@ -41,11 +41,13 @@ export function NotificationBell({
   const [showPanel, setShowPanel] = useState(false);
   const [toasts, setToasts] = useState<Notification[]>([]);
   const [isAlerting, setIsAlerting] = useState(false);
+  const [unreadBadgeCount, setUnreadBadgeCount] = useState(0);
   const seenIdsRef = useRef<Set<string>>(new Set()); // Use ref to track seen IDs without triggering re-renders
   const hasInitializedRef = useRef(false);
   const bellAlertTimeoutRef = useRef<number | null>(null);
-  
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const MAX_NOTIFICATIONS = 30;
+
+  const unreadBadgeText = unreadBadgeCount > MAX_NOTIFICATIONS ? `${MAX_NOTIFICATIONS}+` : String(unreadBadgeCount);
 
   const triggerBellAlert = () => {
     setIsAlerting(true);
@@ -94,6 +96,7 @@ export function NotificationBell({
 
     stopBellAlert();
     setToasts([]);
+    setUnreadBadgeCount(0);
     setNotifications((prev) => prev.map((n) => (n.isRead ? n : { ...n, isRead: true })));
   }, [isViewingLiveStream]);
 
@@ -105,7 +108,7 @@ export function NotificationBell({
       hasInitializedRef.current = true;
       liveThreats.forEach((t) => seenIdsRef.current.add(t.alert_id));
       
-      const initialNotifications: Notification[] = liveThreats.slice(0, 10).map((t) => ({
+      const initialNotifications: Notification[] = liveThreats.slice(0, MAX_NOTIFICATIONS).map((t) => ({
         id: t.alert_id,
         type: t.threat_type,
         description: `${t.threat_type} detected by ${t.sensor_id}`,
@@ -138,7 +141,10 @@ export function NotificationBell({
     });
 
     if (newNotifications.length > 0) {
-      setNotifications((prev) => [...newNotifications, ...prev].slice(0, 10));
+      setNotifications((prev) => [...newNotifications, ...prev].slice(0, MAX_NOTIFICATIONS));
+      if (!isViewingLiveStream) {
+        setUnreadBadgeCount((prev) => prev + newNotifications.length);
+      }
 
       if (!isViewingLiveStream) {
         triggerBellAlert();
@@ -176,10 +182,12 @@ export function NotificationBell({
 
   const markAllAsRead = () => {
     if (clearOnMarkAllRead) {
+      setUnreadBadgeCount(0);
       setNotifications([]);
       return;
     }
 
+    setUnreadBadgeCount(0);
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
   };
 
@@ -236,7 +244,7 @@ export function NotificationBell({
             }}
           >
             <Bell size={20} />
-            {unreadCount > 0 && (
+            {unreadBadgeCount > 0 && (
               <div
                 className="absolute -top-1 -right-1 flex items-center justify-center rounded-full"
                 style={{
@@ -249,7 +257,7 @@ export function NotificationBell({
                   padding: '0 4px',
                 }}
               >
-                {unreadCount}
+                {unreadBadgeText}
               </div>
             )}
           </button>
@@ -383,6 +391,9 @@ export function NotificationBell({
                         {/* Close Button */}
                         <button
                           onClick={() => {
+                            if (!notification.isRead) {
+                              setUnreadBadgeCount((prev) => Math.max(0, prev - 1));
+                            }
                             setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
                           }}
                           className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"

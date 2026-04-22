@@ -14,6 +14,7 @@ interface HeadlessUIDropdownProps {
   placeholder?: string
   compact?: boolean
   disabled?: boolean
+  renderInline?: boolean
 }
 
 export default function HeadlessUIDropdown({
@@ -24,6 +25,7 @@ export default function HeadlessUIDropdown({
   placeholder,
   compact = false,
   disabled = false,
+  renderInline = false,
 }: HeadlessUIDropdownProps) {
   const selectedLabel = options.find(opt => opt.value === value)?.label || placeholder || 'Select...'
 
@@ -44,7 +46,7 @@ export default function HeadlessUIDropdown({
           {label}
         </label>
       )}
-      <Menu>
+      <Menu as="div" className="relative">
         <MenuButton
           disabled={disabled}
           className="inline-flex items-center justify-between gap-2 rounded-md appearance-none cursor-pointer transition-all duration-200"
@@ -70,13 +72,13 @@ export default function HeadlessUIDropdown({
         {!disabled && (
         <MenuItems
           transition
-          anchor="bottom start"
+          anchor={renderInline ? undefined : 'bottom start'}
           className="origin-top rounded-lg border transition duration-100 ease-out focus:outline-none data-closed:scale-95 data-closed:opacity-0"
           style={{
             background: '#FFFFFF',
             border: '1px solid #E2E8F0',
             borderRadius: '6px',
-            marginTop: '4px',
+            marginTop: renderInline ? '0' : '4px',
             minWidth: compact ? '104px' : '300px',
             maxWidth: 'calc(100vw - 24px)',
             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
@@ -84,12 +86,15 @@ export default function HeadlessUIDropdown({
             padding: '4px',
             maxHeight: '300px',
             overflowY: 'auto',
-            position: 'fixed',
+            position: renderInline ? 'absolute' : undefined,
+            top: renderInline ? 'calc(100% + 4px)' : undefined,
+            left: renderInline ? '0' : undefined,
           }}
         >
           {options.map((option) => (
             <MenuItem key={option.value}>
               <button
+                type="button"
                 onClick={() => onChange(option.value)}
                 className="flex w-full items-center gap-2 rounded text-left transition-colors data-focus:bg-blue-50"
                 style={{
