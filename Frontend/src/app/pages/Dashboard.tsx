@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ShieldAlert, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, ExternalLink, ShieldAlert, X } from 'lucide-react';
 import { ThreatMap } from '../components/ThreatMap';
 import { LiveAlerts } from '../components/LiveAlerts';
 import { ThreatPlaybackTimeline } from '../components/ThreatPlaybackTimeline';
@@ -23,6 +23,29 @@ const PLAYBACK_ROLL_INTERVAL_MS = 15 * 1000;
 const PLAYBACK_RECONCILE_INTERVAL_MS = 3 * 60 * 1000;
 const PLAYBACK_RECONCILE_LOOKBACK_MS = 60 * 60 * 1000;
 const PLAYBACK_RECONCILE_OVERLAP_MS = 2 * 60 * 1000;
+
+const OSM_LINES_REFERENCE_URL = 'https://wiki.openstreetmap.org/wiki/OpenStreetMap_Carto/Lines';
+
+type OSMTopLegendItem = {
+  label: string;
+  color: string;
+  kind: 'line' | 'fill';
+  width?: number;
+  dashed?: boolean;
+};
+
+const OSM_TOP_LEGEND: OSMTopLegendItem[] = [
+  { label: 'Forest / Woodland', color: '#9cc58a', kind: 'fill' },
+  { label: 'Open Land / Scrub', color: '#d7e6a3', kind: 'fill' },
+  { label: 'Built-up Urban Area', color: '#e6e3db', kind: 'fill' },
+  { label: 'Motorway / Expressway', color: '#ef8a73', kind: 'line', width: 4 },
+  { label: 'Primary Road', color: '#f3b363', kind: 'line', width: 3 },
+  { label: 'Secondary Road', color: '#f0d58b', kind: 'line', width: 2.5 },
+  { label: 'Local / Minor Road', color: '#c8c8c8', kind: 'line', width: 2 },
+  { label: 'Railway Track', color: '#6a6a6a', kind: 'line', width: 2 },
+  { label: 'River / Canal', color: '#8db7e8', kind: 'line', width: 2 },
+  { label: 'Administrative Boundary', color: '#a58bb6', kind: 'line', width: 2, dashed: true },
+];
 
 const buildPlaybackBuckets = (
   threats: ThreatLog[],
@@ -67,6 +90,7 @@ export function Dashboard() {
   const [historicalThreats, setHistoricalThreats] = useState<ThreatLog[]>([]);
   const [playbackLoading, setPlaybackLoading] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [isMapSymbolsOpen, setIsMapSymbolsOpen] = useState(false);
   const processedLiveThreatIdsRef = useRef<Set<string>>(new Set());
   const playbackLastSyncMsRef = useRef<number | null>(null);
   const playbackSyncInFlightRef = useRef(false);
@@ -597,21 +621,84 @@ export function Dashboard() {
           <LiveAlerts onAlertClick={handleLiveAlertClick} />
         </div>
 
-        <div
-          className="absolute bottom-4 left-4 z-[600] rounded-3xl border px-4 py-3 shadow-lg backdrop-blur-md"
-          style={{
-            background: 'rgba(255,255,255,0.94)',
-            borderColor: 'rgba(226,232,240,0.9)',
-          }}
-        >
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: 'var(--text-secondary)' }}>
-            <ShieldAlert size={14} />
-            Legend
+        <div className="absolute bottom-4 left-4 z-[600] flex flex-col items-start gap-2">
+          <div
+            className="w-fit rounded-2xl border px-3 py-2 shadow-lg backdrop-blur-md"
+            style={{
+              background: 'rgba(255,255,255,0.94)',
+              borderColor: 'rgba(226,232,240,0.9)',
+            }}
+          >
+            <div className="grid gap-1 text-xs">
+              <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-red-500" />Red dot - Threat</div>
+              <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Green dot - Active sensor</div>
+              <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-slate-500" />Gray dot - Inactive sensor</div>
+            </div>
           </div>
-          <div className="mt-2 grid gap-1 text-sm">
-            <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Active sensor</div>
-            <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-red-500" />Recent threat</div>
-            <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-slate-500" />Inactive / offline</div>
+
+          <div
+            className="rounded-2xl border px-3 py-2 shadow-lg backdrop-blur-md"
+            style={{
+              background: 'rgba(255,255,255,0.94)',
+              borderColor: 'rgba(226,232,240,0.9)',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setIsMapSymbolsOpen((previous) => !previous)}
+              className="flex w-full items-center justify-between rounded-md px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.12em]"
+              style={{ color: 'var(--text-secondary)', background: 'rgba(248,250,252,0.92)' }}
+              aria-expanded={isMapSymbolsOpen}
+            >
+              <span className="flex items-center gap-1.5">
+                <ShieldAlert size={12} />
+                Legend
+              </span>
+              {isMapSymbolsOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+
+            {isMapSymbolsOpen && (
+              <div className="mt-2 pt-2" style={{ borderTop: '1px solid rgba(226,232,240,0.95)' }}>
+                <div className="grid gap-1.5 text-xs" style={{ maxHeight: '170px', overflowY: 'auto' }}>
+                  {OSM_TOP_LEGEND.map((item) => (
+                    <div key={item.label} className="flex items-center gap-2">
+                      <span
+                        aria-hidden
+                        style={item.kind === 'fill'
+                          ? {
+                              width: '14px',
+                              height: '10px',
+                              borderRadius: '3px',
+                              border: '1px solid rgba(100,116,139,0.35)',
+                              background: item.color,
+                              display: 'inline-block',
+                            }
+                          : {
+                              width: '20px',
+                              borderTop: `${item.width || 2}px ${item.dashed ? 'dashed' : 'solid'} ${item.color}`,
+                              display: 'inline-block',
+                            }}
+                      />
+                      <span>{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <a
+                  href={OSM_LINES_REFERENCE_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold"
+                  style={{
+                    color: '#0f4c81',
+                    background: 'rgba(15, 76, 129, 0.08)',
+                  }}
+                >
+                  Show all symbols
+                  <ExternalLink size={12} />
+                </a>
+              </div>
+            )}
           </div>
         </div>
 
