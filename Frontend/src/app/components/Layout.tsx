@@ -127,6 +127,7 @@ export function Layout() {
         clearOnMarkAllRead
         isViewingLiveStream={isViewingLiveStream}
         enablePanel={!isDashboardRoute}
+        showBellIcon={!isDashboardRoute}
       />
       {/* Sidebar */}
       <aside
@@ -140,25 +141,7 @@ export function Layout() {
       >
         <div className="flex flex-col h-full">
           <div className="px-4 pt-4 pb-3 border-b" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className="flex h-10 w-10 items-center justify-center rounded-xl"
-                  style={{ background: 'linear-gradient(135deg, rgba(14,165,233,0.24), rgba(59,130,246,0.18))' }}
-                >
-                  <Shield size={20} style={{ color: '#E0F2FE' }} />
-                </div>
-                {sidebarOpen && (
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold tracking-[0.18em] uppercase" style={{ color: '#F8FAFC' }}>
-                      Sentinel Grid
-                    </div>
-                    <div className="truncate text-xs" style={{ color: 'rgba(226,232,240,0.72)' }}>
-                      Real-time threat operations
-                    </div>
-                  </div>
-                )}
-              </div>
+            <div className="flex items-center justify-end">
 
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}

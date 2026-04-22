@@ -5,6 +5,7 @@ import { LiveAlerts } from '../components/LiveAlerts';
 import { ThreatPlaybackTimeline } from '../components/ThreatPlaybackTimeline';
 import { useSensors } from '../context/SensorContext';
 import { useWebSocket } from '../context/WebSocketContext';
+import { useTimezone } from '../context/TimezoneContext';
 import { useMapNavigation } from '../context/MapNavigationContext';
 import { apiGet, APIError } from '../services/apiClient';
 import { PagedThreats, ThreatLog } from '../types/api';
@@ -54,6 +55,7 @@ const buildPlaybackBuckets = (
 export function Dashboard() {
   const { sensorList } = useSensors();
   const { liveThreats, connectionStatus } = useWebSocket();
+  const { timezone } = useTimezone();
   const { selectedThreat, setSelectedThreat } = useMapNavigation();
 
   const [isPlaybackMode, setIsPlaybackMode] = useState(false);
@@ -636,6 +638,7 @@ export function Dashboard() {
                 isPlaying={isPlaybackRunning}
                 isLoading={playbackLoading}
                 error={playbackError}
+                timezone={timezone}
                 startMs={playbackWindowStartMs}
                 endMs={playbackWindowEndMs}
                 cursorMs={playbackCursorMs ?? playbackWindowStartMs}
@@ -668,6 +671,7 @@ export function Dashboard() {
                 isPlaying={isPlaybackRunning}
                 isLoading={playbackLoading}
                 error={playbackError}
+                timezone={timezone}
                 startMs={playbackWindowStartMs}
                 endMs={playbackWindowEndMs}
                 cursorMs={playbackCursorMs ?? playbackWindowStartMs}

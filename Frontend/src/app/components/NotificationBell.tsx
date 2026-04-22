@@ -22,6 +22,7 @@ interface NotificationBellProps {
   clearOnMarkAllRead?: boolean;
   isViewingLiveStream?: boolean;
   enablePanel?: boolean;
+  showBellIcon?: boolean;
 }
 
 export function NotificationBell({
@@ -30,6 +31,7 @@ export function NotificationBell({
   clearOnMarkAllRead = false,
   isViewingLiveStream = false,
   enablePanel = true,
+  showBellIcon = true,
 }: NotificationBellProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -80,6 +82,12 @@ export function NotificationBell({
       setShowPanel(false);
     }
   }, [enablePanel, showPanel]);
+
+  useEffect(() => {
+    if (!showBellIcon && showPanel) {
+      setShowPanel(false);
+    }
+  }, [showBellIcon, showPanel]);
 
   useEffect(() => {
     if (!isViewingLiveStream) return;
@@ -201,49 +209,51 @@ export function NotificationBell({
         className="fixed z-[300]"
         style={{ top: '20px', right: '20px' }}
       >
-        <button
-          onClick={() => {
-            if (!enablePanel) {
-              return;
-            }
-            setShowPanel((prev) => !prev);
-          }}
-          className="relative p-2 rounded-2xl transition-all duration-200 shadow-sm"
-          style={{
-            background: isAlerting ? 'rgba(220,38,38,0.12)' : 'rgba(255,255,255,0.95)',
-            border: isAlerting ? '1px solid rgba(220,38,38,0.5)' : '1px solid rgba(226,232,240,0.9)',
-            color: isAlerting ? '#B91C1C' : 'var(--accent-cyan)',
-            animation: isAlerting ? 'bellBlink 0.8s ease-in-out infinite' : 'none',
-          }}
-          onMouseEnter={(e) => {
-            if (isAlerting) return;
-            e.currentTarget.style.background = 'rgba(14,165,233,0.08)';
-            e.currentTarget.style.borderColor = 'rgba(14,165,233,0.35)';
-          }}
-          onMouseLeave={(e) => {
-            if (isAlerting) return;
-            e.currentTarget.style.background = 'rgba(255,255,255,0.95)';
-            e.currentTarget.style.borderColor = 'rgba(226,232,240,0.9)';
-          }}
-        >
-          <Bell size={20} />
-          {unreadCount > 0 && (
-            <div
-              className="absolute -top-1 -right-1 flex items-center justify-center rounded-full"
-              style={{
-                background: '#DC2626',
-                color: '#FFFFFF',
-                minWidth: '18px',
-                height: '18px',
-                fontSize: '0.7rem',
-                fontWeight: 600,
-                padding: '0 4px',
-              }}
-            >
-              {unreadCount}
-            </div>
-          )}
-        </button>
+        {showBellIcon && (
+          <button
+            onClick={() => {
+              if (!enablePanel) {
+                return;
+              }
+              setShowPanel((prev) => !prev);
+            }}
+            className="relative p-2 rounded-2xl transition-all duration-200 shadow-sm"
+            style={{
+              background: isAlerting ? 'rgba(220,38,38,0.12)' : 'rgba(255,255,255,0.95)',
+              border: isAlerting ? '1px solid rgba(220,38,38,0.5)' : '1px solid rgba(226,232,240,0.9)',
+              color: isAlerting ? '#B91C1C' : 'var(--accent-cyan)',
+              animation: isAlerting ? 'bellBlink 0.8s ease-in-out infinite' : 'none',
+            }}
+            onMouseEnter={(e) => {
+              if (isAlerting) return;
+              e.currentTarget.style.background = 'rgba(14,165,233,0.08)';
+              e.currentTarget.style.borderColor = 'rgba(14,165,233,0.35)';
+            }}
+            onMouseLeave={(e) => {
+              if (isAlerting) return;
+              e.currentTarget.style.background = 'rgba(255,255,255,0.95)';
+              e.currentTarget.style.borderColor = 'rgba(226,232,240,0.9)';
+            }}
+          >
+            <Bell size={20} />
+            {unreadCount > 0 && (
+              <div
+                className="absolute -top-1 -right-1 flex items-center justify-center rounded-full"
+                style={{
+                  background: '#DC2626',
+                  color: '#FFFFFF',
+                  minWidth: '18px',
+                  height: '18px',
+                  fontSize: '0.7rem',
+                  fontWeight: 600,
+                  padding: '0 4px',
+                }}
+              >
+                {unreadCount}
+              </div>
+            )}
+          </button>
+        )}
 
         {/* Notification Panel Dropdown */}
         {enablePanel && showPanel && (

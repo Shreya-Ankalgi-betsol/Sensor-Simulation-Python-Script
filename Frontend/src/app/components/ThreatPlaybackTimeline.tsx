@@ -11,6 +11,7 @@ type ThreatPlaybackTimelineProps = {
   isPlaying: boolean;
   isLoading: boolean;
   error: string | null;
+  timezone: string;
   startMs: number;
   endMs: number;
   cursorMs: number;
@@ -30,9 +31,10 @@ const SPEED_DROPDOWN_OPTIONS = SPEED_OPTIONS.map((option) => ({
   label: `${option}x`,
 }));
 
-const formatTimelineHourLabel = (timestampMs: number) =>
+const formatTimelineHourLabel = (timestampMs: number, timezone: string) =>
   new Intl.DateTimeFormat(undefined, {
     hour: 'numeric',
+    timeZone: timezone,
   }).format(new Date(timestampMs));
 
 const buildTimelineTicks = (startMs: number, endMs: number) => {
@@ -57,6 +59,7 @@ export function ThreatPlaybackTimeline({
   isPlaying,
   isLoading,
   error,
+  timezone,
   startMs,
   endMs,
   cursorMs,
@@ -209,7 +212,7 @@ export function ThreatPlaybackTimeline({
                       transform: 'translateX(-50%)',
                     }}
                   >
-                    {formatTimelineHourLabel(tickMs)}
+                    {formatTimelineHourLabel(tickMs, timezone)}
                   </span>
                 ))}
                 <span
