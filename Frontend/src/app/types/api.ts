@@ -54,6 +54,32 @@ export interface PagedThreats {
 }
 
 /**
+ * Adaptive chunk manifest entry
+ * Matches backend ThreatChunkManifestItem schema
+ */
+export interface ThreatChunkManifestItem {
+  chunk_id: string
+  start_time: string
+  end_time: string
+  threat_count: number
+  label: string
+}
+
+/**
+ * Chunk response payload
+ * Matches backend ThreatChunkOut schema
+ */
+export interface ThreatChunkOut {
+  chunk_id: string
+  start_time: string
+  end_time: string
+  threat_count: number
+  items: ThreatLog[]
+  next_cursor: string | null
+  has_more: boolean
+}
+
+/**
  * Summary statistics for threats
  * Matches backend ThreatSummaryOut schema
  */

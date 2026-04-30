@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
-from app.schemas.threat import PagedThreats, ThreatFilter
+from app.schemas.threat import (
+    PagedThreats,
+    ThreatChunkManifestItem,
+    ThreatChunkOut,
+    ThreatFilter,
+)
 from app.services.threat_service import threat_service
 from app.models.threat_log import ThreatSeverity
 
@@ -58,6 +63,33 @@ async def get_threats(
         page_size=page_size,
     )
     return await threat_service.get_threats(filters, db)
+
+
+@router.get(
+    "/manifest",
+    response_model=list[ThreatChunkManifestItem],
+    summary="Get adaptive chunk manifest",
+    description="Returns chunk boundaries for the last 12 hours based on threat density.",
+)
+async def get_threat_manifest(
+    db: AsyncSession = Depends(get_db),
+) -> list[ThreatChunkManifestItem]:
+    return await threat_service.get_threat_manifest(db)
+
+
+@router.get(
+    "/chunk/{chunk_id}",
+    response_model=ThreatChunkOut,
+    summary="Get threats for a chunk",
+    description="Returns threats for a manifest chunk with optional pagination.",
+)
+async def get_threat_chunk(
+    chunk_id: str,
+    cursor: str | None = None,
+    page_size: int = Query(5000, ge=1, le=5000),
+    db: AsyncSession = Depends(get_db),
+) -> ThreatChunkOut:
+    return await threat_service.get_threat_chunk(chunk_id, db, cursor, page_size)
 
 
 # @router.put(

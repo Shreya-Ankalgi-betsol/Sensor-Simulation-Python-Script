@@ -3,6 +3,8 @@ import {
   useContext,
   useEffect,
   useState,
+  useMemo,
+  useRef,
   ReactNode,
 } from 'react'
 import { mockWS, WSMessage } from '../services/WebSocketClient'
@@ -28,6 +30,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
   const [threatSummary, setThreatSummary] = useState<ThreatSummaryOut | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
+  const threatIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     // Auto-connect on mount and keep connection always open
@@ -59,11 +62,23 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
         // Prepend new threat to the list (global state - all pages can access)
         setLiveThreats((prev) => {
-          // Avoid duplicates
-          if (prev.some((t) => t.alert_id === message.payload.alert_id)) {
+          const alertId = message.payload.alert_id
+
+          // Fast duplicate check in O(1)
+          if (threatIdsRef.current.has(alertId)) {
             return prev
           }
-          return [message.payload, ...prev].slice(0, maxLiveThreats)
+
+          const next = [message.payload, ...prev]
+          if (next.length > maxLiveThreats) {
+            const removedThreat = next.pop()
+            if (removedThreat?.alert_id) {
+              threatIdsRef.current.delete(removedThreat.alert_id)
+            }
+          }
+
+          threatIdsRef.current.add(alertId)
+          return next
         })
       }
     })
@@ -72,23 +87,32 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     return () => {
       unsubscribe()
       unsubscribeStatus()
+      threatIdsRef.current.clear()
     }
   }, [])
 
   // Calculate threat summary from live threats for the live stream tab
-  const derivedThreatSummary: ThreatSummaryOut = {
-    total_threats: liveThreats.length,
-    high_severity_count: liveThreats.filter(t => t.severity === 'high').length,
-    active_sensor_count: 0, // This will be calculated in Threats.tsx using sensor list
-  }
+  const derivedThreatSummary = useMemo<ThreatSummaryOut>(
+    () => ({
+      total_threats: liveThreats.length,
+      high_severity_count: liveThreats.filter((t) => t.severity === 'high').length,
+      active_sensor_count: 0, // This will be calculated in Threats.tsx using sensor list
+    }),
+    [liveThreats]
+  )
+
+  const contextValue = useMemo(
+    () => ({
+      liveThreats,
+      threatSummary: threatSummary ?? derivedThreatSummary,
+      isConnected,
+      connectionStatus,
+    }),
+    [liveThreats, threatSummary, derivedThreatSummary, isConnected, connectionStatus]
+  )
 
   return (
-    <WebSocketContext.Provider value={{ 
-      liveThreats, 
-      threatSummary: threatSummary ?? derivedThreatSummary,
-      isConnected, 
-      connectionStatus,
-    }}>
+    <WebSocketContext.Provider value={contextValue}>
       {children}
     </WebSocketContext.Provider>
   )

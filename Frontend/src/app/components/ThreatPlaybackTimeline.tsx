@@ -72,10 +72,8 @@ export function ThreatPlaybackTimeline({
   onSeekRelative,
   onSpeedChange,
 }: ThreatPlaybackTimelineProps) {
-  const maxCount = Math.max(...buckets.map((bucket) => bucket.count), 1);
   const clampedCursor = Math.min(endMs, Math.max(startMs, cursorMs));
   const progressRatio = endMs > startMs ? (clampedCursor - startMs) / (endMs - startMs) : 0;
-  const showBars = buckets.length > 0;
   const timelineTicks = buildTimelineTicks(startMs, endMs);
   const displayTicks = timelineTicks.length > 0 ? timelineTicks : [startMs, endMs];
   const labelRangeMs = Math.max(1, endMs - startMs);
@@ -236,29 +234,9 @@ export function ThreatPlaybackTimeline({
                 className="playback-slider w-full"
                 style={{ ['--progress' as string]: `${progressRatio * 100}%` }}
               />
-              <div className="mt-0.5 h-[14px] rounded-sm" style={{ background: '#E2EFFB' }}>
-                <div className="flex h-full items-end gap-[2px]">
-                  {showBars &&
-                    buckets.map((bucket) => {
-                      const height = Math.max(2, Math.round((bucket.count / maxCount) * 100));
-                      const isPast = bucket.bucketStartMs <= clampedCursor;
-
-                      return (
-                        <div
-                          key={bucket.bucketStartMs}
-                          className="flex-1 rounded-[1px]"
-                          style={{
-                            height: `${height}%`,
-                            background: isPast ? '#0EA5E9' : '#B7D4EC',
-                          }}
-                        />
-                      );
-                    })}
-                </div>
-              </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-1.5">
+            <div className="flex shrink-0 items-center gap-1.5" style={{ marginTop: '8px' }}>
               <span
                 className="rounded-full border px-2 py-0.5 text-[0.66rem] font-semibold"
                 style={{

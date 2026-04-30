@@ -60,3 +60,23 @@ class ThreatSummaryOut(BaseModel):
     total_threats: int
     high_severity_count: int
     active_sensor_count: int
+
+
+# Chunk manifest item
+class ThreatChunkManifestItem(BaseModel):
+    chunk_id: str
+    start_time: datetime
+    end_time: datetime
+    threat_count: int
+    label: str
+
+
+# Chunk response payload
+class ThreatChunkOut(BaseModel):
+    chunk_id: str
+    start_time: datetime
+    end_time: datetime
+    threat_count: int
+    items: list[ThreatOut]
+    next_cursor: str | None = None
+    has_more: bool

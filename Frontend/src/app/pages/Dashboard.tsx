@@ -2,27 +2,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronUp, ExternalLink, ShieldAlert, X } from 'lucide-react';
 import { ThreatMap } from '../components/ThreatMap';
 import { LiveAlerts } from '../components/LiveAlerts';
-import { ThreatPlaybackTimeline } from '../components/ThreatPlaybackTimeline';
+import { ModeToggle } from '../components/dashboard/ModeToggle';
+import { PlaybackTimelinePanel } from '../components/dashboard/PlaybackTimelinePanel';
+import type { PlaybackBucket } from '../components/ThreatPlaybackTimeline';
 import { useSensors } from '../context/SensorContext';
 import { useWebSocket } from '../context/WebSocketContext';
 import { useTimezone } from '../context/TimezoneContext';
 import { useMapNavigation } from '../context/MapNavigationContext';
-import { apiGet, APIError } from '../services/apiClient';
-import { PagedThreats, ThreatLog } from '../types/api';
+import { useChunkManager } from '../hooks/useChunkManager';
+import { APIError } from '../services/apiClient';
+import type { ThreatChunkManifestItem, ThreatLog } from '../types/api';
 
 const PLAYBACK_WINDOW_HOURS = 12;
 const PLAYBACK_WINDOW_MS = PLAYBACK_WINDOW_HOURS * 60 * 60 * 1000;
 const PLAYBACK_DOT_WINDOW_MS = 60 * 1000;
 const PLAYBACK_BUCKET_MS = 5 * 60 * 1000;
-const PLAYBACK_PAGE_SIZE = 500;
-const PLAYBACK_MAX_PAGES = 80;
-const PLAYBACK_RECONCILE_MAX_PAGES = 30;
 const PLAYBACK_TICK_INTERVAL_MS = 200;
 const PLAYBACK_BASE_ADVANCE_MS = 30 * 1000;
-const PLAYBACK_ROLL_INTERVAL_MS = 15 * 1000;
-const PLAYBACK_RECONCILE_INTERVAL_MS = 3 * 60 * 1000;
-const PLAYBACK_RECONCILE_LOOKBACK_MS = 60 * 60 * 1000;
-const PLAYBACK_RECONCILE_OVERLAP_MS = 2 * 60 * 1000;
+const PLAYBACK_FETCH_THROTTLE_MS = 250;
+const SCRUB_THROTTLE_MS = 100;
+const SCRUB_DEBOUNCE_MS = 300;
 
 const OSM_LINES_REFERENCE_URL = 'https://wiki.openstreetmap.org/wiki/OpenStreetMap_Carto/Lines';
 
@@ -47,29 +46,37 @@ const OSM_TOP_LEGEND: OSMTopLegendItem[] = [
   { label: 'Administrative Boundary', color: '#a58bb6', kind: 'line', width: 2, dashed: true },
 ];
 
-const buildPlaybackBuckets = (
-  threats: ThreatLog[],
+// Distribute chunk counts into fixed buckets for timeline display.
+const buildManifestBuckets = (
+  manifest: ThreatChunkManifestItem[],
   startMs: number,
   endMs: number,
   bucketMs: number
-) => {
+): PlaybackBucket[] => {
   const bucketCount = Math.max(1, Math.ceil((endMs - startMs) / bucketMs));
   const buckets = Array.from({ length: bucketCount }, (_, index) => ({
     bucketStartMs: startMs + index * bucketMs,
     count: 0,
   }));
 
-  threats.forEach((threat) => {
-    const threatMs = new Date(threat.timestamp).getTime();
-    if (threatMs < startMs || threatMs > endMs) {
+  manifest.forEach((chunk) => {
+    if (chunk.threat_count <= 0) {
       return;
     }
 
-    const bucketIndex = Math.min(
+    const chunkStart = new Date(chunk.start_time).getTime();
+    const chunkEnd = new Date(chunk.end_time).getTime();
+    const midpoint = (chunkStart + chunkEnd) / 2;
+
+    if (midpoint < startMs || midpoint > endMs) {
+      return;
+    }
+
+    const index = Math.min(
       buckets.length - 1,
-      Math.max(0, Math.floor((threatMs - startMs) / bucketMs))
+      Math.max(0, Math.floor((midpoint - startMs) / bucketMs))
     );
-    buckets[bucketIndex].count += 1;
+    buckets[index].count += chunk.threat_count;
   });
 
   return buckets;
@@ -77,9 +84,18 @@ const buildPlaybackBuckets = (
 
 export function Dashboard() {
   const { sensorList } = useSensors();
-  const { liveThreats, connectionStatus } = useWebSocket();
+  const { liveThreats } = useWebSocket();
   const { timezone } = useTimezone();
   const { selectedThreat, setSelectedThreat } = useMapNavigation();
+
+  const {
+    manifest,
+    isLoading: isChunkLoading,
+    getThreatsAtTime,
+    currentChunkId,
+    cacheSize,
+    insertLiveThreat,
+  } = useChunkManager();
 
   const [isPlaybackMode, setIsPlaybackMode] = useState(false);
   const [isPlaybackRunning, setIsPlaybackRunning] = useState(false);
@@ -87,125 +103,86 @@ export function Dashboard() {
   const [playbackWindowStartMs, setPlaybackWindowStartMs] = useState(Date.now() - PLAYBACK_WINDOW_MS);
   const [playbackWindowEndMs, setPlaybackWindowEndMs] = useState(Date.now());
   const [playbackCursorMs, setPlaybackCursorMs] = useState<number | null>(null);
-  const [historicalThreats, setHistoricalThreats] = useState<ThreatLog[]>([]);
-  const [playbackLoading, setPlaybackLoading] = useState(false);
+  const [playbackThreats, setPlaybackThreats] = useState<ThreatLog[]>([]);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [playbackLiveCount, setPlaybackLiveCount] = useState(0);
   const [isMapSymbolsOpen, setIsMapSymbolsOpen] = useState(false);
   const processedLiveThreatIdsRef = useRef<Set<string>>(new Set());
-  const playbackLastSyncMsRef = useRef<number | null>(null);
-  const playbackSyncInFlightRef = useRef(false);
+  const playbackLiveCountRef = useRef(0);
+  const scrubThrottleRef = useRef(0);
+  const scrubDebounceRef = useRef<number | null>(null);
+  const playbackFetchThrottleRef = useRef(0);
 
-  const mergeThreatCollections = useCallback(
-    (base: ThreatLog[], incoming: ThreatLog[], windowEndMs: number) => {
-      const windowStartMs = windowEndMs - PLAYBACK_WINDOW_MS;
-      const mergedById = new Map<string, ThreatLog>();
+  const playbackLoading = isChunkLoading;
 
-      const upsertThreat = (threat: ThreatLog) => {
-        const threatMs = new Date(threat.timestamp).getTime();
-        if (!Number.isFinite(threatMs) || threatMs < windowStartMs || threatMs > windowEndMs) {
-          return;
-        }
-
-        const existing = mergedById.get(threat.alert_id);
-        if (!existing || new Date(existing.timestamp).getTime() < threatMs) {
-          mergedById.set(threat.alert_id, threat);
-        }
-      };
-
-      base.forEach(upsertThreat);
-      incoming.forEach(upsertThreat);
-
-      return Array.from(mergedById.values()).sort(
-        (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
-      );
+  // Fetch cached threats near the selected playback time.
+  const loadThreatsForTime = useCallback(
+    async (targetMs: number) => {
+      setPlaybackError(null);
+      try {
+        const threats = await getThreatsAtTime(targetMs);
+        setPlaybackThreats(threats);
+        console.log('[Dashboard] Loaded threats for time:', new Date(targetMs).toISOString());
+      } catch (error) {
+        const message = error instanceof APIError ? error.message : 'Unable to load playback chunk.';
+        setPlaybackError(message);
+      }
     },
-    []
+    [getThreatsAtTime]
   );
 
-  const fetchThreatRange = useCallback(async (fromMs: number, toMs: number, maxPages: number) => {
-    if (toMs <= fromMs) {
-      return [] as ThreatLog[];
+  useEffect(() => {
+    if (manifest.length === 0) {
+      return;
     }
 
-    const threatsByAlertId = new Map<string, ThreatLog>();
-    let cursor: string | null = null;
-    let hasMore = true;
-    let pagesLoaded = 0;
+    const startMs = new Date(manifest[0].start_time).getTime();
+    const endMs = new Date(manifest[manifest.length - 1].end_time).getTime();
 
-    while (hasMore && pagesLoaded < maxPages) {
-      const params = new URLSearchParams();
-      params.append('from_dt', new Date(fromMs).toISOString());
-      params.append('to_dt', new Date(toMs).toISOString());
-      params.append('page_size', String(PLAYBACK_PAGE_SIZE));
-
-      if (cursor) {
-        params.append('cursor', cursor);
-      }
-
-      const page = await apiGet<PagedThreats>(`/api/v1/threats?${params.toString()}`);
-      page.items.forEach((threat) => {
-        threatsByAlertId.set(threat.alert_id, threat);
-      });
-
-      cursor = page.next_cursor;
-      hasMore = Boolean(page.has_more && cursor);
-      pagesLoaded += 1;
-    }
-
-    return Array.from(threatsByAlertId.values()).sort(
-      (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
-    );
-  }, []);
-
-  const fetchPlaybackThreats = useCallback(async () => {
-    setPlaybackLoading(true);
-    setPlaybackError(null);
-
-    const endMs = Date.now();
-    const startMs = endMs - PLAYBACK_WINDOW_MS;
-
-    try {
-      const sortedThreats = await fetchThreatRange(startMs, endMs, PLAYBACK_MAX_PAGES);
-
-      setHistoricalThreats(sortedThreats);
+    if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
       setPlaybackWindowStartMs(startMs);
       setPlaybackWindowEndMs(endMs);
-      setPlaybackCursorMs(startMs);
-      processedLiveThreatIdsRef.current = new Set(sortedThreats.map((threat) => threat.alert_id));
-      playbackLastSyncMsRef.current = endMs;
-      return true;
-    } catch (error) {
-      const message = error instanceof APIError ? error.message : 'Unable to load playback history.';
-      setPlaybackError(message);
-      return false;
-    } finally {
-      setPlaybackLoading(false);
+      setPlaybackCursorMs((previous) => previous ?? startMs);
+      playbackLiveCountRef.current = 0;
+      setPlaybackLiveCount(0);
     }
-  }, [fetchThreatRange]);
+  }, [manifest]);
 
+  // Enter playback mode and load the initial chunk.
   const handleStartPlayback = useCallback(async () => {
     setIsPlaybackMode(true);
     setIsPlaybackRunning(false);
     setSelectedThreat(null);
 
-    const loaded = await fetchPlaybackThreats();
-    if (!loaded) {
-      setIsPlaybackRunning(false);
-      return;
-    }
+    const fallbackStartMs = Date.now() - PLAYBACK_WINDOW_MS;
+    const manifestStartMs = manifest.length > 0
+      ? new Date(manifest[0].start_time).getTime()
+      : fallbackStartMs;
+    const startMs = Number.isFinite(manifestStartMs) ? manifestStartMs : fallbackStartMs;
 
+    setPlaybackCursorMs(startMs);
+    processedLiveThreatIdsRef.current = new Set(liveThreats.map((threat) => threat.alert_id));
+    playbackLiveCountRef.current = 0;
+    setPlaybackLiveCount(0);
+    await loadThreatsForTime(startMs);
     setIsPlaybackRunning(true);
-  }, [fetchPlaybackThreats, setSelectedThreat]);
+    console.log('[Dashboard] Playback started at', new Date(startMs).toISOString());
+  }, [loadThreatsForTime, liveThreats, manifest, setSelectedThreat]);
 
+  // Exit playback mode and reset playback state.
   const handleExitPlayback = useCallback(() => {
     setIsPlaybackMode(false);
     setIsPlaybackRunning(false);
     setPlaybackError(null);
     setPlaybackCursorMs(null);
-    setHistoricalThreats([]);
+    setPlaybackThreats([]);
+    playbackLiveCountRef.current = 0;
+    setPlaybackLiveCount(0);
     processedLiveThreatIdsRef.current.clear();
-    playbackLastSyncMsRef.current = null;
-    playbackSyncInFlightRef.current = false;
+    if (scrubDebounceRef.current) {
+      window.clearTimeout(scrubDebounceRef.current);
+      scrubDebounceRef.current = null;
+    }
   }, []);
 
   const handleModeToggle = useCallback(
@@ -222,26 +199,45 @@ export function Dashboard() {
     [handleExitPlayback, handleStartPlayback, isPlaybackMode]
   );
 
+  // Handle scrubber drag with throttle + debounce.
   const handleSeek = useCallback(
     (nextMs: number) => {
       const clamped = Math.min(playbackWindowEndMs, Math.max(playbackWindowStartMs, nextMs));
-      setPlaybackCursorMs(clamped);
+      const nowMs = Date.now();
+
+      if (nowMs - scrubThrottleRef.current >= SCRUB_THROTTLE_MS) {
+        setPlaybackCursorMs(clamped);
+        scrubThrottleRef.current = nowMs;
+      }
+
+      if (scrubDebounceRef.current) {
+        window.clearTimeout(scrubDebounceRef.current);
+      }
+
+      scrubDebounceRef.current = window.setTimeout(() => {
+        setPlaybackCursorMs(clamped);
+        void loadThreatsForTime(clamped);
+        console.log('[Dashboard] Scrub settled at', new Date(clamped).toISOString());
+      }, SCRUB_DEBOUNCE_MS);
     },
-    [playbackWindowEndMs, playbackWindowStartMs]
+    [loadThreatsForTime, playbackWindowEndMs, playbackWindowStartMs]
   );
 
+  // Jump playback cursor by a relative delta.
   const handleSeekRelative = useCallback(
     (deltaMs: number) => {
-      setPlaybackCursorMs((previous) => {
-        if (previous === null) {
-          return previous;
-        }
+      if (playbackCursorMs === null) {
+        return;
+      }
 
-        const nextValue = previous + deltaMs;
-        return Math.min(playbackWindowEndMs, Math.max(playbackWindowStartMs, nextValue));
-      });
+      const nextValue = Math.min(
+        playbackWindowEndMs,
+        Math.max(playbackWindowStartMs, playbackCursorMs + deltaMs)
+      );
+      setPlaybackCursorMs(nextValue);
+      void loadThreatsForTime(nextValue);
     },
-    [playbackWindowEndMs, playbackWindowStartMs]
+    [loadThreatsForTime, playbackCursorMs, playbackWindowEndMs, playbackWindowStartMs]
   );
 
   const handleLiveAlertClick = useCallback((threat: ThreatLog) => {
@@ -275,29 +271,29 @@ export function Dashboard() {
   }, [isPlaybackMode, isPlaybackRunning, playbackCursorMs, playbackSpeed, playbackWindowEndMs]);
 
   useEffect(() => {
+    if (!isPlaybackMode || !isPlaybackRunning || playbackCursorMs === null) {
+      return;
+    }
+
+    const nowMs = Date.now();
+    if (nowMs - playbackFetchThrottleRef.current < PLAYBACK_FETCH_THROTTLE_MS) {
+      return;
+    }
+
+    playbackFetchThrottleRef.current = nowMs;
+    void loadThreatsForTime(playbackCursorMs);
+  }, [isPlaybackMode, isPlaybackRunning, loadThreatsForTime, playbackCursorMs]);
+
+  useEffect(() => {
     if (!isPlaybackMode) {
       return;
     }
 
-    const rollWindow = window.setInterval(() => {
-      const nowMs = Date.now();
-      setPlaybackWindowEndMs(nowMs);
-      setPlaybackWindowStartMs(nowMs - PLAYBACK_WINDOW_MS);
-      setHistoricalThreats((previous) => mergeThreatCollections(previous, [], nowMs));
-      setPlaybackCursorMs((previous) => {
-        if (previous === null) {
-          return previous;
-        }
-
-        const windowStartMs = nowMs - PLAYBACK_WINDOW_MS;
-        return Math.min(nowMs, Math.max(windowStartMs, previous));
-      });
-    }, PLAYBACK_ROLL_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(rollWindow);
-    };
-  }, [isPlaybackMode, mergeThreatCollections]);
+    console.log('[Dashboard] Cache status:', {
+      currentChunkId,
+      cacheSize,
+    });
+  }, [cacheSize, currentChunkId, isPlaybackMode]);
 
   useEffect(() => {
     if (!isPlaybackMode || liveThreats.length === 0) {
@@ -320,105 +316,31 @@ export function Dashboard() {
 
     incomingFromSocket.forEach((threat) => {
       knownIds.add(threat.alert_id);
+      insertLiveThreat(threat);
     });
 
-    const nowMs = Date.now();
-    setPlaybackWindowEndMs(nowMs);
-    setPlaybackWindowStartMs(nowMs - PLAYBACK_WINDOW_MS);
-    setHistoricalThreats((previous) => mergeThreatCollections(previous, incomingFromSocket, nowMs));
-
-    const latestIncomingMs = Math.max(
-      ...incomingFromSocket.map((threat) => new Date(threat.timestamp).getTime()).filter(Number.isFinite)
-    );
-    if (Number.isFinite(latestIncomingMs)) {
-      playbackLastSyncMsRef.current = Math.max(playbackLastSyncMsRef.current ?? 0, latestIncomingMs);
-    }
-  }, [isPlaybackMode, liveThreats, mergeThreatCollections]);
-
-  useEffect(() => {
-    if (!isPlaybackMode) {
-      return;
+    if (isPlaybackMode) {
+      playbackLiveCountRef.current += incomingFromSocket.length;
+      setPlaybackLiveCount(playbackLiveCountRef.current);
     }
 
-    processedLiveThreatIdsRef.current = new Set(historicalThreats.map((threat) => threat.alert_id));
-  }, [historicalThreats, isPlaybackMode]);
-
-  const reconcilePlaybackThreats = useCallback(async () => {
-    if (!isPlaybackMode || playbackSyncInFlightRef.current) {
-      return;
-    }
-
-    playbackSyncInFlightRef.current = true;
-    const nowMs = Date.now();
-    const windowStartMs = nowMs - PLAYBACK_WINDOW_MS;
-    const fallbackStartMs = nowMs - PLAYBACK_RECONCILE_LOOKBACK_MS;
-    const lastSyncMs = playbackLastSyncMsRef.current;
-    const fromMs = Math.max(
-      windowStartMs,
-      (lastSyncMs ?? fallbackStartMs) - PLAYBACK_RECONCILE_OVERLAP_MS
-    );
-
-    try {
-      const incrementalThreats = await fetchThreatRange(fromMs, nowMs, PLAYBACK_RECONCILE_MAX_PAGES);
-      setPlaybackWindowEndMs(nowMs);
-      setPlaybackWindowStartMs(windowStartMs);
-      setHistoricalThreats((previous) => mergeThreatCollections(previous, incrementalThreats, nowMs));
-
-      incrementalThreats.forEach((threat) => {
-        processedLiveThreatIdsRef.current.add(threat.alert_id);
-      });
-
-      const latestIncrementalMs = Math.max(
-        ...incrementalThreats.map((threat) => new Date(threat.timestamp).getTime()).filter(Number.isFinite),
-        nowMs
-      );
-      playbackLastSyncMsRef.current = latestIncrementalMs;
-    } catch (error) {
-      console.warn('[Dashboard] Playback reconciliation failed:', error);
-    } finally {
-      playbackSyncInFlightRef.current = false;
-    }
-  }, [fetchThreatRange, isPlaybackMode, mergeThreatCollections]);
-
-  useEffect(() => {
-    if (!isPlaybackMode) {
-      return;
-    }
-
-    const reconcileInterval = window.setInterval(() => {
-      void reconcilePlaybackThreats();
-    }, PLAYBACK_RECONCILE_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(reconcileInterval);
-    };
-  }, [isPlaybackMode, reconcilePlaybackThreats]);
-
-  useEffect(() => {
-    if (!isPlaybackMode || connectionStatus !== 'connected') {
-      return;
-    }
-
-    void reconcilePlaybackThreats();
-  }, [connectionStatus, isPlaybackMode, reconcilePlaybackThreats]);
+    console.log('[Dashboard] Live threats merged into cache:', incomingFromSocket.length);
+  }, [insertLiveThreat, isPlaybackMode, liveThreats]);
 
   const playbackBuckets = useMemo(
-    () => buildPlaybackBuckets(historicalThreats, playbackWindowStartMs, playbackWindowEndMs, PLAYBACK_BUCKET_MS),
-    [historicalThreats, playbackWindowStartMs, playbackWindowEndMs]
+    () => buildManifestBuckets(manifest, playbackWindowStartMs, playbackWindowEndMs, PLAYBACK_BUCKET_MS),
+    [manifest, playbackWindowStartMs, playbackWindowEndMs]
   );
 
-  const playbackVisibleThreats = useMemo(() => {
-    if (!isPlaybackMode || playbackCursorMs === null) {
-      return [];
-    }
+  const playbackVisibleThreats = useMemo(
+    () => (isPlaybackMode ? playbackThreats : []),
+    [isPlaybackMode, playbackThreats]
+  );
 
-    const frameStartMs = playbackCursorMs - PLAYBACK_DOT_WINDOW_MS;
-
-    return historicalThreats.filter((threat) => {
-      const threatMs = new Date(threat.timestamp).getTime();
-      return threatMs >= frameStartMs && threatMs <= playbackCursorMs;
-    });
-  }, [historicalThreats, isPlaybackMode, playbackCursorMs]);
+  const totalPlaybackThreats = useMemo(
+    () => manifest.reduce((sum, chunk) => sum + chunk.threat_count, 0) + playbackLiveCount,
+    [manifest, playbackLiveCount]
+  );
 
   // Get severity-based colors for selected threat banner
   const getSeverityBannerColor = (severity: string) => {
@@ -497,92 +419,20 @@ export function Dashboard() {
           </button>
         )}
 
-        <div
-          className="absolute top-3 z-[645] hidden xl:block"
-          style={{
-            right: '308px',
-          }}
-        >
-          <div
-            className="relative inline-grid grid-cols-2 items-center rounded-full border p-1 shadow-lg backdrop-blur-md"
-            style={{
-              background: 'rgba(255,255,255,0.94)',
-              borderColor: 'rgba(226,232,240,0.9)',
-            }}
-          >
-            <span
-              className="pointer-events-none absolute bottom-1 left-1 top-1 rounded-full transition-all duration-300 ease-out"
-              style={{
-                width: 'calc(50% - 4px)',
-                transform: isPlaybackMode ? 'translateX(100%)' : 'translateX(0)',
-                background: isPlaybackMode ? 'rgba(2,132,199,0.14)' : 'rgba(22,163,74,0.14)',
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => void handleModeToggle('live')}
-              disabled={playbackLoading}
-              className="relative z-10 w-[92px] rounded-full px-3 py-1 text-center text-[0.68rem] font-semibold uppercase tracking-[0.1em] transition-colors duration-300 disabled:opacity-60"
-              style={{
-                color: !isPlaybackMode ? '#16A34A' : '#64748B',
-              }}
-            >
-              Live
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleModeToggle('playback')}
-              disabled={playbackLoading}
-              className="relative z-10 w-[92px] rounded-full px-3 py-1 text-center text-[0.68rem] font-semibold uppercase tracking-[0.1em] transition-colors duration-300 disabled:opacity-60"
-              style={{
-                color: isPlaybackMode ? '#0284C7' : '#64748B',
-              }}
-            >
-              {playbackLoading ? 'Loading' : 'Playback'}
-            </button>
-          </div>
-        </div>
+        <ModeToggle
+          containerClassName="absolute top-3 z-[645] hidden xl:block"
+          containerStyle={{ right: '308px' }}
+          isPlaybackMode={isPlaybackMode}
+          playbackLoading={playbackLoading}
+          onToggle={handleModeToggle}
+        />
 
-        <div className="absolute right-4 top-3 z-[645] xl:hidden">
-          <div
-            className="relative inline-grid grid-cols-2 items-center rounded-full border p-1 shadow-lg backdrop-blur-md"
-            style={{
-              background: 'rgba(255,255,255,0.94)',
-              borderColor: 'rgba(226,232,240,0.9)',
-            }}
-          >
-            <span
-              className="pointer-events-none absolute bottom-1 left-1 top-1 rounded-full transition-all duration-300 ease-out"
-              style={{
-                width: 'calc(50% - 4px)',
-                transform: isPlaybackMode ? 'translateX(100%)' : 'translateX(0)',
-                background: isPlaybackMode ? 'rgba(2,132,199,0.14)' : 'rgba(22,163,74,0.14)',
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => void handleModeToggle('live')}
-              disabled={playbackLoading}
-              className="relative z-10 w-[92px] rounded-full px-3 py-1 text-center text-[0.68rem] font-semibold uppercase tracking-[0.1em] transition-colors duration-300 disabled:opacity-60"
-              style={{
-                color: !isPlaybackMode ? '#16A34A' : '#64748B',
-              }}
-            >
-              Live
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleModeToggle('playback')}
-              disabled={playbackLoading}
-              className="relative z-10 w-[92px] rounded-full px-3 py-1 text-center text-[0.68rem] font-semibold uppercase tracking-[0.1em] transition-colors duration-300 disabled:opacity-60"
-              style={{
-                color: isPlaybackMode ? '#0284C7' : '#64748B',
-              }}
-            >
-              {playbackLoading ? 'Loading' : 'Playback'}
-            </button>
-          </div>
-        </div>
+        <ModeToggle
+          containerClassName="absolute right-4 top-3 z-[645] xl:hidden"
+          isPlaybackMode={isPlaybackMode}
+          playbackLoading={playbackLoading}
+          onToggle={handleModeToggle}
+        />
 
         {/* Selected Threat Banner */}
         {selectedThreat && threatBannerColor && (
@@ -703,76 +553,53 @@ export function Dashboard() {
         </div>
 
         {isPlaybackMode && (
-          <div
-            className="absolute bottom-4 z-[700] hidden xl:block"
-            style={{
+          <PlaybackTimelinePanel
+            containerClassName="absolute bottom-4 z-[700] hidden xl:block"
+            containerStyle={{
               left: '280px',
               right: `${playbackOverlayRight}px`,
               height: `${playbackOverlayHeight}px`,
             }}
-          >
-            <div
-              className="h-full border-t px-3"
-              style={{
-                background: 'linear-gradient(180deg, #F5FAFF 0%, #EAF4FF 100%)',
-                borderTopColor: '#93C5FD',
-                boxShadow: '0 10px 26px rgba(14, 116, 144, 0.2), inset 0 1px 0 rgba(255,255,255,0.7)',
-                borderRadius: '12px',
-              }}
-            >
-              <ThreatPlaybackTimeline
-                isPlaybackMode={isPlaybackMode}
-                isPlaying={isPlaybackRunning}
-                isLoading={playbackLoading}
-                error={playbackError}
-                timezone={timezone}
-                startMs={playbackWindowStartMs}
-                endMs={playbackWindowEndMs}
-                cursorMs={playbackCursorMs ?? playbackWindowStartMs}
-                speed={playbackSpeed}
-                buckets={playbackBuckets}
-                totalThreats={historicalThreats.length}
-                onStartPlayback={handleStartPlayback}
-                onTogglePlay={() => setIsPlaybackRunning((previous) => !previous)}
-                onSeek={handleSeek}
-                onSeekRelative={handleSeekRelative}
-                onSpeedChange={setPlaybackSpeed}
-              />
-            </div>
-          </div>
+            isPlaybackMode={isPlaybackMode}
+            isPlaying={isPlaybackRunning}
+            isLoading={playbackLoading}
+            error={playbackError}
+            timezone={timezone}
+            startMs={playbackWindowStartMs}
+            endMs={playbackWindowEndMs}
+            cursorMs={playbackCursorMs ?? playbackWindowStartMs}
+            speed={playbackSpeed}
+            buckets={playbackBuckets}
+            totalThreats={totalPlaybackThreats}
+            onStartPlayback={handleStartPlayback}
+            onTogglePlay={() => setIsPlaybackRunning((previous) => !previous)}
+            onSeek={handleSeek}
+            onSeekRelative={handleSeekRelative}
+            onSpeedChange={setPlaybackSpeed}
+          />
         )}
 
         {isPlaybackMode && (
-          <div className="absolute inset-x-4 bottom-[8.25rem] z-[700] xl:hidden" style={{ height: `${playbackOverlayHeight}px` }}>
-            <div
-              className="h-full border-t px-3"
-              style={{
-                background: 'linear-gradient(180deg, #F5FAFF 0%, #EAF4FF 100%)',
-                borderTopColor: '#93C5FD',
-                boxShadow: '0 10px 26px rgba(14, 116, 144, 0.2), inset 0 1px 0 rgba(255,255,255,0.7)',
-                borderRadius: '12px',
-              }}
-            >
-              <ThreatPlaybackTimeline
-                isPlaybackMode={isPlaybackMode}
-                isPlaying={isPlaybackRunning}
-                isLoading={playbackLoading}
-                error={playbackError}
-                timezone={timezone}
-                startMs={playbackWindowStartMs}
-                endMs={playbackWindowEndMs}
-                cursorMs={playbackCursorMs ?? playbackWindowStartMs}
-                speed={playbackSpeed}
-                buckets={playbackBuckets}
-                totalThreats={historicalThreats.length}
-                onStartPlayback={handleStartPlayback}
-                onTogglePlay={() => setIsPlaybackRunning((previous) => !previous)}
-                onSeek={handleSeek}
-                onSeekRelative={handleSeekRelative}
-                onSpeedChange={setPlaybackSpeed}
-              />
-            </div>
-          </div>
+          <PlaybackTimelinePanel
+            containerClassName="absolute inset-x-4 bottom-[8.25rem] z-[700] xl:hidden"
+            containerStyle={{ height: `${playbackOverlayHeight}px` }}
+            isPlaybackMode={isPlaybackMode}
+            isPlaying={isPlaybackRunning}
+            isLoading={playbackLoading}
+            error={playbackError}
+            timezone={timezone}
+            startMs={playbackWindowStartMs}
+            endMs={playbackWindowEndMs}
+            cursorMs={playbackCursorMs ?? playbackWindowStartMs}
+            speed={playbackSpeed}
+            buckets={playbackBuckets}
+            totalThreats={totalPlaybackThreats}
+            onStartPlayback={handleStartPlayback}
+            onTogglePlay={() => setIsPlaybackRunning((previous) => !previous)}
+            onSeek={handleSeek}
+            onSeekRelative={handleSeekRelative}
+            onSpeedChange={setPlaybackSpeed}
+          />
         )}
 
         <div className="absolute inset-x-4 bottom-4 z-[600] xl:hidden">

@@ -129,7 +129,7 @@ export function Visualization() {
 
       while (hasMore && pageCount < maxPages) {
         const params = new URLSearchParams();
-        params.append('page_size', '500');
+        params.append('page_size', '20');
         if (cursor) params.append('cursor', cursor);
 
         const response = await apiGet<PagedThreats>(`/api/v1/threats?${params.toString()}`);
