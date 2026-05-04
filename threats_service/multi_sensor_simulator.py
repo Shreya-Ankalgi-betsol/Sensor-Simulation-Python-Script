@@ -1,4 +1,7 @@
 
+""" multi-sensor simulator for generating backend-facing sensor streams.
+"""
+
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -27,7 +30,11 @@ sensor_lock = threading.Lock()
 
 
 class ObjectWorld:
+    """Maintains the simulated object tracks shared by all sensor streams."""
+
     def __init__(self):
+        """Initialize world state, object storage, and simulation tuning constants."""
+
         self._lock = threading.Lock()
         self._tracks = {}
         self._next_track_number = 1
@@ -42,6 +49,8 @@ class ObjectWorld:
         self._max_center_distance_m = 850.0
 
     def _meters_to_latlng(self, lat0, lng0, north_m, east_m):
+        """Convert local north/east meter offsets into latitude/longitude."""
+
         earth_radius_m = 6378137.0
         lat0_rad = math.radians(lat0)
         dlat_deg = math.degrees(north_m / earth_radius_m)
@@ -49,6 +58,8 @@ class ObjectWorld:
         return lat0 + dlat_deg, lng0 + dlng_deg
 
     def _relative_offsets_m(self, lat0, lng0, lat1, lng1):
+        """Compute north/east meter offsets from one lat/lng point to another."""
+
         earth_radius_m = 6378137.0
         lat0_rad = math.radians(lat0)
         dlat_rad = math.radians(lat1 - lat0)
@@ -58,6 +69,8 @@ class ObjectWorld:
         return north_m, east_m
 
     def _build_track(self):
+        """Create one new simulated moving object track with randomized attributes."""
+
         object_type = self._rng.choices(
             ["person", "drone", "vehicle"],
             weights=[0.5, 0.25, 0.25],
@@ -103,6 +116,8 @@ class ObjectWorld:
         }
 
     def set_center_from_sensors(self, backend_sensors):
+        """Update world center as the mean position of currently known backend sensors."""
+
         valid_coords = []
         for sensor_payload in backend_sensors:
             try:
@@ -123,6 +138,8 @@ class ObjectWorld:
             self._center_lng = sum(lng for _, lng in valid_coords) / len(valid_coords)
 
     def _distance_from_center(self, track):
+        """Return distance in meters between a track and the world center."""
+
         north_m, east_m = self._relative_offsets_m(
             self._center_lat,
             self._center_lng,
@@ -132,6 +149,8 @@ class ObjectWorld:
         return math.sqrt(north_m**2 + east_m**2)
 
     def _tick_track(self, track, dt):
+        """Advance one track by dt seconds, including stop/resume behavior."""
+
         track["age_seconds"] += dt
 
         if track["state"] == "stopped":
@@ -168,6 +187,8 @@ class ObjectWorld:
             track["v_east_mps"] = 0.0
 
     def tick(self, dt):
+        """Advance all tracks, remove expired ones, and maintain target object count."""
+
         with self._lock:
             expired_track_ids = []
             for track_id, track in self._tracks.items():
@@ -202,6 +223,8 @@ class ObjectWorld:
                 )
 
     def visible_tracks_for_sensor(self, sensor):
+        """Return a snapshot of tracks currently visible to one sensor."""
+
         sensor_type = sensor.__class__.__name__.replace("Sensor", "").lower()
         fov_deg = self._fov_by_sensor_type.get(sensor_type, 120.0)
 
@@ -231,7 +254,10 @@ class ObjectWorld:
 world = ObjectWorld()
 
 
+# Backend synchronization helpers.
 def _fetch_backend_sensors():
+    """Fetch the current sensor list from the backend API."""
+
     request = Request(SENSOR_LIST_URL, headers={"Accept": "application/json"})
     with urlopen(request, timeout=10) as response:
         status_code = getattr(response, "status", None)
@@ -245,6 +271,8 @@ def _fetch_backend_sensors():
 
 
 def _build_sensor(sensor_payload):
+    """Create a concrete radar or lidar sensor from backend payload data."""
+
     sensor_id = str(sensor_payload.get("sensor_id", "")).strip()
     sensor_type = str(sensor_payload.get("sensor_type", "")).strip().lower()
 
@@ -273,6 +301,8 @@ def _build_sensor(sensor_payload):
 
 
 def _refresh_sensor_coordinates(sensor, sensor_payload):
+    """Refresh a sensor's position and radius from latest backend values."""
+
     try:
         sensor.latitude = float(sensor_payload.get("lat", sensor.latitude))
         sensor.longitude = float(sensor_payload.get("lng", sensor.longitude))
@@ -285,6 +315,8 @@ def _refresh_sensor_coordinates(sensor, sensor_payload):
 
 
 def sensor_thread(sensor, stop_event):
+    """Stream generated payloads for one sensor until the sensor is removed."""
+
     while not stop_event.is_set():
         client = None
         try:
@@ -342,6 +374,8 @@ def sensor_thread(sensor, stop_event):
 
 
 def sync_sensors_from_backend():
+    """Continuously reconcile backend sensors with local stream threads."""
+
     while True:
         try:
             backend_sensors = _fetch_backend_sensors()
@@ -420,12 +454,15 @@ def sync_sensors_from_backend():
 
 
 def world_thread(stop_event):
+    """Advance the object world on a fixed simulation tick."""
+
     while not stop_event.is_set():
         world.tick(WORLD_TICK_SECONDS)
         if stop_event.wait(WORLD_TICK_SECONDS):
             break
 
 
+# Bootstrap happens at import time so this file behaves like a runnable simulator.
 print(f"Fetching sensors from: {SENSOR_LIST_URL}")
 print("Create sensors from frontend/admin; simulator will auto-start streams.")
 

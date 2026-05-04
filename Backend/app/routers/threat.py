@@ -22,9 +22,10 @@ router = APIRouter(
     response_model=PagedThreats,
     summary="Get all threats",
     description=(
-        "Returns a cursor-paginated list of threats. "
+        "Returns a paginated list of threats. "
+        "Supports offset-based pagination for virtualized lists and cursor-based pagination for incremental loading. "
         "Supports filtering by sensor_id, severity, acknowledged status, and date range. "
-        "Pass the next_cursor from the previous response to load more."
+        "Pass the next_cursor from the previous response to load more, or provide offset/page_size for random access."
     ),
 )
 async def get_threats(
@@ -35,6 +36,7 @@ async def get_threats(
     from_dt: str | None = None,
     to_dt: str | None = None,
     cursor: str | None = None,
+    offset: int | None = Query(None, ge=0),
     page_size: int = Query(20, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ) -> PagedThreats:
@@ -60,6 +62,7 @@ async def get_threats(
         from_dt=from_dt,
         to_dt=to_dt,
         cursor=cursor,
+        offset=offset,
         page_size=page_size,
     )
     return await threat_service.get_threats(filters, db)

@@ -54,6 +54,7 @@ class ThreatFilter(BaseModel):
     to_dt: Optional[datetime] = None
     page_size: int = 20
     cursor: Optional[str] = None
+    offset: Optional[int] = None
     
 # Summary     
 class ThreatSummaryOut(BaseModel):

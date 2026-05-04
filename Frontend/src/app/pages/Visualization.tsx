@@ -10,7 +10,6 @@ import {
   Cell,
   Legend,
   Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -32,6 +31,11 @@ type ThreatWithContext = ThreatLog & {
   location: string;
   severity_normalized: 'low' | 'med' | 'high' | 'critical';
 };
+
+const ALL_THREAT_TYPES_OPTION = '__ALL_THREAT_TYPES__';
+const ALL_LOCATIONS_OPTION = '__ALL_LOCATIONS__';
+const ALL_SEVERITIES_OPTION = '__ALL_SEVERITIES__';
+const SEVERITY_FILTER_VALUES: Array<'critical' | 'high' | 'med' | 'low'> = ['critical', 'high', 'med', 'low'];
 
 const severityPalette: Record<'low' | 'med' | 'high' | 'critical', string> = {
   low: '#16a34a',
@@ -101,10 +105,13 @@ export function Visualization() {
 
   const [filterTimeRange, setFilterTimeRange] = useState('Last 7 Days');
   const [filterLocation, setFilterLocation] = useState<string[]>([]);
+  const [isLocationAllMode, setIsLocationAllMode] = useState(false);
   const [filterThreatType, setFilterThreatType] = useState<string[]>([]);
+  const [isThreatTypeAllMode, setIsThreatTypeAllMode] = useState(false);
   const [filterSensorType, setFilterSensorType] = useState<string[]>([]);
   const [filterSensorId, setFilterSensorId] = useState<string[]>([]);
   const [filterSeverity, setFilterSeverity] = useState<string[]>([]);
+  const [isSeverityAllMode, setIsSeverityAllMode] = useState(false);
   const [fromDateTime, setFromDateTime] = useState<Date | null>(null);
   const [toDateTime, setToDateTime] = useState<Date | null>(null);
 
@@ -129,7 +136,11 @@ export function Visualization() {
 
       while (hasMore && pageCount < maxPages) {
         const params = new URLSearchParams();
+<<<<<<< Updated upstream
         params.append('page_size', '20');
+=======
+        params.append('page_size', '200');
+>>>>>>> Stashed changes
         if (cursor) params.append('cursor', cursor);
 
         const response = await apiGet<PagedThreats>(`/api/v1/threats?${params.toString()}`);
@@ -173,6 +184,46 @@ export function Visualization() {
     return Array.from(new Set(threatsWithContext.map((t) => t.location).filter(Boolean))).sort();
   }, [threatsWithContext]);
 
+  const allLocationsSelected = useMemo(
+    () => availableLocations.length > 0 && filterLocation.length === availableLocations.length,
+    [availableLocations, filterLocation]
+  );
+
+  const locationOptions = useMemo(
+    () => [
+      { value: ALL_LOCATIONS_OPTION, label: 'All Locations' },
+      ...availableLocations.map((location) => ({ value: location, label: location })),
+    ],
+    [availableLocations]
+  );
+
+  const locationSelectionForUI = useMemo(
+    () => (allLocationsSelected ? [ALL_LOCATIONS_OPTION, ...filterLocation] : filterLocation),
+    [allLocationsSelected, filterLocation]
+  );
+
+  const handleLocationChange = useCallback(
+    (values: string[]) => {
+      const cleaned = values.filter((value) => value !== ALL_LOCATIONS_OPTION);
+
+      if (values.includes(ALL_LOCATIONS_OPTION)) {
+        if (cleaned.length < availableLocations.length) {
+          setIsLocationAllMode(false);
+          setFilterLocation(cleaned);
+          return;
+        }
+
+        setIsLocationAllMode(true);
+        setFilterLocation(availableLocations);
+        return;
+      }
+
+      setIsLocationAllMode(false);
+      setFilterLocation(cleaned);
+    },
+    [availableLocations]
+  );
+
   const availableThreatTypes = useMemo(() => {
     const scopedThreats = threatsWithContext.filter((threat) => {
       if (filterSensorType.length && !filterSensorType.includes(threat.sensor_type.toLowerCase())) {
@@ -186,6 +237,86 @@ export function Visualization() {
 
     return Array.from(new Set(scopedThreats.map((t) => t.threat_type).filter(Boolean))).sort();
   }, [threatsWithContext, filterSensorType, filterSensorId]);
+
+  const allThreatTypesSelected = useMemo(
+    () => availableThreatTypes.length > 0 && filterThreatType.length === availableThreatTypes.length,
+    [availableThreatTypes, filterThreatType]
+  );
+
+  const threatTypeOptions = useMemo(
+    () => [
+      { value: ALL_THREAT_TYPES_OPTION, label: 'All Threat Types' },
+      ...availableThreatTypes.map((threatType) => ({ value: threatType, label: threatType })),
+    ],
+    [availableThreatTypes]
+  );
+
+  const threatTypeSelectionForUI = useMemo(
+    () => (allThreatTypesSelected ? [ALL_THREAT_TYPES_OPTION, ...filterThreatType] : filterThreatType),
+    [allThreatTypesSelected, filterThreatType]
+  );
+
+  const handleThreatTypeChange = useCallback(
+    (values: string[]) => {
+      const cleaned = values.filter((value) => value !== ALL_THREAT_TYPES_OPTION);
+
+      if (values.includes(ALL_THREAT_TYPES_OPTION)) {
+        if (cleaned.length < availableThreatTypes.length) {
+          setIsThreatTypeAllMode(false);
+          setFilterThreatType(cleaned);
+          return;
+        }
+
+        setIsThreatTypeAllMode(true);
+        setFilterThreatType(availableThreatTypes);
+        return;
+      }
+
+      setIsThreatTypeAllMode(false);
+      setFilterThreatType(cleaned);
+    },
+    [availableThreatTypes]
+  );
+
+  const allSeveritiesSelected = useMemo(
+    () => filterSeverity.length === SEVERITY_FILTER_VALUES.length,
+    [filterSeverity]
+  );
+
+  const severityOptions = useMemo(
+    () => [
+      { value: ALL_SEVERITIES_OPTION, label: 'All Severities' },
+      { value: 'critical', label: 'Critical' },
+      { value: 'high', label: 'High' },
+      { value: 'med', label: 'Medium' },
+      { value: 'low', label: 'Low' },
+    ],
+    []
+  );
+
+  const severitySelectionForUI = useMemo(
+    () => (allSeveritiesSelected ? [ALL_SEVERITIES_OPTION, ...filterSeverity] : filterSeverity),
+    [allSeveritiesSelected, filterSeverity]
+  );
+
+  const handleSeverityChange = useCallback((values: string[]) => {
+    const cleaned = values.filter((value) => value !== ALL_SEVERITIES_OPTION);
+
+    if (values.includes(ALL_SEVERITIES_OPTION)) {
+      if (cleaned.length < SEVERITY_FILTER_VALUES.length) {
+        setIsSeverityAllMode(false);
+        setFilterSeverity(cleaned);
+        return;
+      }
+
+      setIsSeverityAllMode(true);
+      setFilterSeverity(SEVERITY_FILTER_VALUES);
+      return;
+    }
+
+    setIsSeverityAllMode(false);
+    setFilterSeverity(cleaned);
+  }, []);
 
   const availableSensorTypes = useMemo(() => {
     let fromThreats = threatsWithContext.map((t) => t.sensor_type.toLowerCase());
@@ -217,8 +348,31 @@ export function Visualization() {
   }, [sensorList, filterSensorType]);
 
   useEffect(() => {
+    if (isLocationAllMode) {
+      setFilterLocation(availableLocations);
+      return;
+    }
+
+    setFilterLocation((previous) => previous.filter((location) => availableLocations.includes(location)));
+  }, [availableLocations, isLocationAllMode]);
+
+  useEffect(() => {
+    if (isThreatTypeAllMode) {
+      setFilterThreatType(availableThreatTypes);
+      return;
+    }
+
     setFilterThreatType((previous) => previous.filter((threatType) => availableThreatTypes.includes(threatType)));
-  }, [availableThreatTypes]);
+  }, [availableThreatTypes, isThreatTypeAllMode]);
+
+  useEffect(() => {
+    if (isSeverityAllMode) {
+      setFilterSeverity(SEVERITY_FILTER_VALUES);
+      return;
+    }
+
+    setFilterSeverity((previous) => previous.filter((value) => SEVERITY_FILTER_VALUES.includes(value as 'critical' | 'high' | 'med' | 'low')));
+  }, [isSeverityAllMode]);
 
   const filteredThreats = useMemo(() => {
     const startTime = getStartTime(filterTimeRange, fromDateTime);
@@ -463,10 +617,13 @@ export function Visualization() {
   const resetFilters = () => {
     setFilterTimeRange('Last 7 Days');
     setFilterLocation([]);
+    setIsLocationAllMode(false);
     setFilterThreatType([]);
+    setIsThreatTypeAllMode(false);
     setFilterSensorType([]);
     setFilterSensorId([]);
     setFilterSeverity([]);
+    setIsSeverityAllMode(false);
     setFromDateTime(null);
     setToDateTime(null);
   };
@@ -615,9 +772,9 @@ export function Visualization() {
                 <div className="flex-1 min-w-[160px]">
                   <CheckboxGroup
                     label="Location"
-                    selected={filterLocation}
-                    onChange={setFilterLocation}
-                    options={availableLocations.map((location) => ({ value: location, label: location }))}
+                    selected={locationSelectionForUI}
+                    onChange={handleLocationChange}
+                    options={locationOptions}
                     placeholderText="All Locations"
                   />
                 </div>
@@ -625,12 +782,9 @@ export function Visualization() {
                 <div className="flex-1 min-w-[160px]">
                   <CheckboxGroup
                     label="Threat Type"
-                    selected={filterThreatType}
-                    onChange={setFilterThreatType}
-                    options={availableThreatTypes.map((threatType) => ({
-                      value: threatType,
-                      label: threatType,
-                    }))}
+                    selected={threatTypeSelectionForUI}
+                    onChange={handleThreatTypeChange}
+                    options={threatTypeOptions}
                     placeholderText="All Threat Types"
                   />
                 </div>
@@ -664,14 +818,9 @@ export function Visualization() {
                 <div className="flex-1 min-w-[160px]">
                   <CheckboxGroup
                     label="Severity"
-                    selected={filterSeverity}
-                    onChange={setFilterSeverity}
-                    options={[
-                      { value: 'critical', label: 'Critical' },
-                      { value: 'high', label: 'High' },
-                      { value: 'med', label: 'Medium' },
-                      { value: 'low', label: 'Low' },
-                    ]}
+                    selected={severitySelectionForUI}
+                    onChange={handleSeverityChange}
+                    options={severityOptions}
                     placeholderText="All Severities"
                   />
                 </div>
@@ -770,7 +919,7 @@ export function Visualization() {
                   <ChartCard title="Threat Pulse Over Time" subtitle="Total detections and high/critical trend">
                     <ChartEmptyGuard hasData={timelineData.length > 0}>
                       <ResponsiveContainer width="100%" height={290}>
-                        <AreaChart data={timelineData}>
+                        <AreaChart data={timelineData} margin={{ top: 8, right: 14, left: 6, bottom: 28 }}>
                           <defs>
                             <linearGradient id="threatTotalGradient" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor="#0f4c81" stopOpacity={0.34} />
@@ -778,8 +927,17 @@ export function Visualization() {
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(203, 213, 225, 0.8)" />
-                          <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
-                          <YAxis stroke="#64748b" fontSize={12} />
+                          <XAxis
+                            dataKey="label"
+                            stroke="#64748b"
+                            fontSize={12}
+                            label={{ value: 'Time', position: 'insideBottom', offset: -6, style: { fontSize: '12px', fill: '#64748b' } }}
+                          />
+                          <YAxis
+                            stroke="#64748b"
+                            fontSize={12}
+                            label={{ value: 'Threat Count', angle: -90, position: 'insideLeft', style: { fontSize: '12px', fill: '#64748b' } }}
+                          />
                           <Tooltip
                             contentStyle={{
                               background: '#ffffff',
@@ -799,10 +957,23 @@ export function Visualization() {
                     <ChartEmptyGuard hasData={locationRiskData.length > 0}>
                       <div style={{ overflowY: 'auto', maxHeight: '450px' }}>
                         <ResponsiveContainer width="100%" height={Math.max(290, locationRiskData.length * 28)}>
-                          <BarChart data={locationRiskData} layout="vertical" margin={{ left: 24 }}>
+                          <BarChart data={locationRiskData} layout="vertical" margin={{ top: 8, right: 10, left: 24, bottom: 22 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(203, 213, 225, 0.7)" />
-                          <XAxis type="number" stroke="#64748b" fontSize={12} label={{ value: 'Risk Score / Threat Count', position: 'insideBottomRight', offset: -10, style: { fontSize: '11px', fill: '#64748b' } }} />
-                          <YAxis type="category" dataKey="location" width={0} stroke="#64748b" fontSize={12} tick={false} />
+                          <XAxis
+                            type="number"
+                            stroke="#64748b"
+                            fontSize={12}
+                            label={{ value: 'Risk Score / Count', position: 'insideBottom', offset: -6, style: { fontSize: '11px', fill: '#64748b' } }}
+                          />
+                          <YAxis
+                            type="category"
+                            dataKey="location"
+                            width={0}
+                            stroke="#64748b"
+                            fontSize={12}
+                            tick={false}
+                            label={{ value: 'Location', angle: -90, position: 'insideLeft', style: { fontSize: '11px', fill: '#64748b' } }}
+                          />
                           <Tooltip
                             formatter={(value: number, name: string) => [Math.round(value), name]}
                             labelFormatter={(location) => `Location: ${location}`}
@@ -826,10 +997,10 @@ export function Visualization() {
                   <ChartCard title="Threat Type Distribution" subtitle="Top detection categories">
                     <ChartEmptyGuard hasData={threatTypeDistributionData.length > 0}>
                       <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
-                        <ResponsiveContainer width={Math.max(500, threatTypeDistributionData.length * 60)} height={290}>
-                          <BarChart data={threatTypeDistributionData}>
+                        <ResponsiveContainer width={Math.max(500, threatTypeDistributionData.length * 60)} height={300}>
+                          <BarChart data={threatTypeDistributionData} margin={{ top: 8, right: 8, left: 0, bottom: 28 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(203, 213, 225, 0.7)" />
-                          <XAxis dataKey="threat_type" stroke="#64748b" fontSize={12} tick={false} label={{ value: 'Threat Type', position: 'bottom', offset: 10, style: { fontSize: '12px', fill: '#64748b' } }} />
+                          <XAxis dataKey="threat_type" stroke="#64748b" fontSize={12} tick={false} label={{ value: 'Threat Type', position: 'insideBottom', offset: -6, style: { fontSize: '12px', fill: '#64748b' } }} />
                           <YAxis stroke="#64748b" fontSize={12} label={{ value: 'Threat Count', angle: -90, position: 'insideLeft', style: { fontSize: '12px', fill: '#64748b' } }} />
                           <Tooltip
                             contentStyle={{
@@ -889,15 +1060,15 @@ export function Visualization() {
                   <ChartCard title="Threat Type x Severity" subtitle="Stacked risk profile by category">
                     <ChartEmptyGuard hasData={threatTypeSeverityData.length > 0}>
                       <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
-                        <ResponsiveContainer width={Math.max(600, threatTypeSeverityData.length * 78)} height={310}>
-                          <BarChart data={threatTypeSeverityData}>
+                        <ResponsiveContainer width={Math.max(600, threatTypeSeverityData.length * 78)} height={320}>
+                          <BarChart data={threatTypeSeverityData} margin={{ top: 8, right: 8, left: 0, bottom: 28 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(203, 213, 225, 0.7)" />
                             <XAxis
                               dataKey="threat_type"
                               stroke="#64748b"
                               fontSize={12}
                               tick={false}
-                              label={{ value: 'Threat Type', position: 'bottom', offset: 10, style: { fontSize: '12px', fill: '#64748b' } }}
+                              label={{ value: 'Threat Type', position: 'insideBottom', offset: -6, style: { fontSize: '12px', fill: '#64748b' } }}
                             />
                             <YAxis
                               stroke="#64748b"
@@ -926,10 +1097,19 @@ export function Visualization() {
                   <ChartCard title="Confidence Distribution" subtitle="Model confidence quality across threats">
                     <ChartEmptyGuard hasData={confidenceDistributionData.some((item) => item.count > 0)}>
                       <ResponsiveContainer width="100%" height={310}>
-                        <LineChart data={confidenceDistributionData}>
+                        <BarChart data={confidenceDistributionData} margin={{ top: 8, right: 14, left: 6, bottom: 28 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(203, 213, 225, 0.7)" />
-                          <XAxis dataKey="band" stroke="#64748b" fontSize={12} />
-                          <YAxis stroke="#64748b" fontSize={12} />
+                          <XAxis
+                            dataKey="band"
+                            stroke="#64748b"
+                            fontSize={12}
+                            label={{ value: 'Confidence Range', position: 'insideBottom', offset: -6, style: { fontSize: '12px', fill: '#64748b' } }}
+                          />
+                          <YAxis
+                            stroke="#64748b"
+                            fontSize={12}
+                            label={{ value: 'Threat Count', angle: -90, position: 'insideLeft', style: { fontSize: '12px', fill: '#64748b' } }}
+                          />
                           <Tooltip
                             contentStyle={{
                               background: '#ffffff',
@@ -937,8 +1117,8 @@ export function Visualization() {
                               borderRadius: '10px',
                             }}
                           />
-                          <Line type="monotone" dataKey="count" stroke="#0f4c81" strokeWidth={2.6} dot={{ r: 4 }} />
-                        </LineChart>
+                          <Bar dataKey="count" name="Threat Count" fill="#0f4c81" radius={[8, 8, 0, 0]} minPointSize={2} />
+                        </BarChart>
                       </ResponsiveContainer>
                     </ChartEmptyGuard>
                   </ChartCard>

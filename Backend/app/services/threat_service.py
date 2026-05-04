@@ -360,8 +360,10 @@ class ThreatService:
         active_sensor_result = await db.execute(active_sensor_query)
         active_sensor_count = active_sensor_result.scalar_one()
 
-        # Apply cursor if provided
-        if filters.cursor is not None:
+        # Apply offset if provided, otherwise fall back to cursor pagination.
+        if filters.offset is not None:
+            query = query.offset(filters.offset)
+        elif filters.cursor is not None:
             cursor_timestamp, cursor_alert_id = self._decode_cursor(filters.cursor)
             query = query.where(
                 or_(
@@ -383,7 +385,7 @@ class ThreatService:
         result = await db.execute(query)
         threats = result.scalars().all()
 
-        # Build next cursor from last item
+        # Build next cursor from the last item in the current page.
         next_cursor = None
         if len(threats) == filters.page_size:
             last = threats[-1]

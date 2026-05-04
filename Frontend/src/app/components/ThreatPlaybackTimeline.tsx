@@ -25,7 +25,7 @@ type ThreatPlaybackTimelineProps = {
   onSpeedChange: (speed: number) => void;
 };
 
-const SPEED_OPTIONS = [0.5, 1, 2, 4];
+const SPEED_OPTIONS = [0.15, 0.25, 0.5, 1, 2, 4];
 const SPEED_DROPDOWN_OPTIONS = SPEED_OPTIONS.map((option) => ({
   value: String(option),
   label: `${option}x`,

@@ -1,11 +1,23 @@
+"""Synthetic radar and lidar sensor models used by the simulator.
+
+The simulator uses these classes in two modes:
+1. Background generation when no real track is visible.
+2. Track-based generation when the world simulator supplies a target.
+
+The base class handles the shared geometry, while RadarSensor and LidarSensor
+format their own payloads to match the downstream ingestion expectations.
+"""
+
 import random
 import math
 from datetime import datetime
 
 
-# Base Sensor Class
 class Sensor:
+    """Shared sensor geometry and helper utilities."""
+
     def __init__(self, sensor_id, latitude, longitude, coverage_radius_m=50.0):
+        """Initialize sensor at position with coverage radius and heading."""
         self.sensor_id = sensor_id
         self.latitude = latitude
         self.longitude = longitude
@@ -15,6 +27,7 @@ class Sensor:
         self._background_cluster = None
 
     def _effective_coverage_radius(self):
+        """Return coverage radius, with minimum of 1.0 meter."""
         return max(float(self.coverage_radius_m), 1.0)
 
     def _sample_clustered_background_polar(self, angular_spread_deg=12.0):
@@ -70,6 +83,7 @@ class Sensor:
         return round(range_m, 2), round(azimuth_deg, 2)
 
     def _meters_to_latlng(self, north_m, east_m):
+        """Convert local north/east meter offsets from sensor position into lat/lng."""
         earth_radius_m = 6378137.0
         lat0_rad = math.radians(self.latitude)
         dlat_deg = math.degrees(north_m / earth_radius_m)
@@ -77,6 +91,7 @@ class Sensor:
         return self.latitude + dlat_deg, self.longitude + dlng_deg
 
     def _relative_offsets_m(self, object_lat, object_lng):
+        """Compute north/east meter offsets from sensor to object lat/lng."""
         earth_radius_m = 6378137.0
         lat0_rad = math.radians(self.latitude)
         dlat_rad = math.radians(object_lat - self.latitude)
@@ -87,6 +102,7 @@ class Sensor:
         return north_m, east_m
 
     def _normalize_signed_angle(self, angle_deg):
+        """Normalize angle to [-180, 180] degree range."""
         wrapped = (angle_deg + 180.0) % 360.0 - 180.0
         return wrapped
 
@@ -104,6 +120,7 @@ class Sensor:
         return round(self.latitude + dlat_deg, 7), round(self.longitude + dlng_deg, 7)
 
     def _compute_global_position(self, range_m, azimuth_deg):
+        """Convert sensor-relative range/azimuth into global position dict."""
         global_bearing_deg = (self.heading_deg + azimuth_deg) % 360
         object_lat, object_lng = self._destination_from_range_bearing(range_m, global_bearing_deg)
         return {
@@ -114,6 +131,7 @@ class Sensor:
         }
 
     def _observation_from_track(self, track):
+        """Convert a track into sensor-relative observation dict if in range/FOV."""
         north_m, east_m = self._relative_offsets_m(track["lat"], track["lng"])
         range_m = math.sqrt(north_m**2 + east_m**2)
         if range_m < 0.01:
@@ -134,14 +152,18 @@ class Sensor:
         }
 
     def get_metadata(self):
+        """Return sensor metadata dict."""
         return {
             "sensor_id": self.sensor_id,
         }
 
 
-# Radar Sensor Class
 class RadarSensor(Sensor):
+    """Generate radar-shaped payloads for background clutter and visible tracks."""
+
     def generate_background_data(self):
+        """Create a synthetic radar detection when no track is visible."""
+
         threat_mode = random.random() < 0.15
 
         if threat_mode:
@@ -174,6 +196,8 @@ class RadarSensor(Sensor):
         }
 
     def generate_data(self, track=None):
+        """Return radar output for a track, or background data when none is provided."""
+
         if track is None:
             return self.generate_background_data()
 
@@ -229,9 +253,12 @@ class RadarSensor(Sensor):
         }
 
 
-# Lidar Sensor Class
 class LidarSensor(Sensor):
+    """Generate lidar-shaped payloads for background clutter and visible tracks."""
+
     def generate_background_data(self):
+        """Create a synthetic lidar detection when no track is visible."""
+
         threat_mode = random.random() < 0.15
 
         range_m, azimuth_deg = self._sample_clustered_background_polar(angular_spread_deg=10.0)
@@ -297,6 +324,8 @@ class LidarSensor(Sensor):
         }
 
     def generate_data(self, track=None):
+        """Return lidar output for a track, or background data when none is provided."""
+
         if track is None:
             return self.generate_background_data()
 
