@@ -4,11 +4,13 @@ import type { ThreatChunkManifestItem, ThreatChunkOut, ThreatLog } from '../type
 
 const MAX_CACHE_SIZE = 3;
 const MAX_THREATS_PER_CHUNK = 5000;
+const MAX_LIVE_BUFFER_SIZE = 5000;
 const PREFETCH_RADIUS = 1;
 const FILTER_WINDOW_MS = 30 * 1000;
 const CHUNK_PAGE_SIZE = 5000;
 
 type ChunkCache = Map<string, ThreatLog[]>;
+type PendingLiveMap = Map<string, ThreatLog[]>;
 
 type LoadChunkOptions = {
   silent?: boolean;
@@ -24,7 +26,55 @@ export function useChunkManager() {
   const manifestRef = useRef<ThreatChunkManifestItem[]>([]);
   const chunkMetaRef = useRef<Map<string, ThreatChunkManifestItem>>(new Map());
   const cacheRef = useRef<ChunkCache>(new Map());
+  const pendingLiveRef = useRef<PendingLiveMap>(new Map());
+  const outOfWindowLiveRef = useRef<ThreatLog[]>([]);
+  const outOfWindowIdsRef = useRef<Set<string>>(new Set());
+  const manifestKeyRef = useRef<string>('');
+  const manifestLoadingRef = useRef(false);
+  const overflowRefreshRef = useRef(false);
   const currentTimeRef = useRef<number | null>(null);
+
+  const buildManifestKey = useCallback((items: ThreatChunkManifestItem[]) => items
+    .map((item) => `${item.chunk_id}:${item.start_time}:${item.end_time}`)
+    .join('|'), []);
+
+  const resetCache = useCallback(() => {
+    cacheRef.current.clear();
+    pendingLiveRef.current.clear();
+    outOfWindowLiveRef.current = [];
+    outOfWindowIdsRef.current.clear();
+    setCacheSize(0);
+    setCurrentChunkId(null);
+  }, []);
+
+  const clearOutOfWindowLive = useCallback(() => {
+    outOfWindowLiveRef.current = [];
+    outOfWindowIdsRef.current.clear();
+  }, []);
+
+  const mergeThreatLists = useCallback((base: ThreatLog[], additions: ThreatLog[]) => {
+    if (additions.length === 0) {
+      return base;
+    }
+
+    const byId = new Map<string, ThreatLog>();
+    base.forEach((item) => byId.set(item.alert_id, item));
+    additions.forEach((item) => {
+      if (!byId.has(item.alert_id)) {
+        byId.set(item.alert_id, item);
+      }
+    });
+
+    const merged = Array.from(byId.values()).sort(
+      (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
+    );
+
+    while (merged.length > MAX_THREATS_PER_CHUNK) {
+      merged.shift();
+    }
+
+    return merged;
+  }, []);
 
   useEffect(() => {
     manifestRef.current = manifest;
@@ -33,17 +83,44 @@ export function useChunkManager() {
 
   // Load the latest manifest from the backend
   const loadManifest = useCallback(async () => {
+    if (manifestLoadingRef.current) {
+      return;
+    }
+
+    manifestLoadingRef.current = true;
     setIsLoading(true);
     try {
       const data = await apiGet<ThreatChunkManifestItem[]>('/api/v1/threats/manifest');
+      const nextKey = buildManifestKey(data);
+      if (nextKey !== manifestKeyRef.current) {
+        resetCache();
+        manifestKeyRef.current = nextKey;
+      }
       manifestRef.current = data;
       chunkMetaRef.current = new Map(data.map((item) => [item.chunk_id, item]));
       setManifest(data);
       console.log('[ChunkManager] Manifest loaded:', data.length, 'chunks');
+      clearOutOfWindowLive();
     } finally {
       setIsLoading(false);
+      manifestLoadingRef.current = false;
+      overflowRefreshRef.current = false;
     }
-  }, []);
+  }, [buildManifestKey, clearOutOfWindowLive, resetCache]);
+
+  const triggerOverflowRefresh = useCallback(async () => {
+    if (overflowRefreshRef.current || manifestLoadingRef.current) {
+      return;
+    }
+
+    overflowRefreshRef.current = true;
+    try {
+      await loadManifest();
+    } catch (error) {
+      overflowRefreshRef.current = false;
+      console.warn('[ChunkManager] Manifest refresh failed after live buffer overflow.');
+    }
+  }, [loadManifest]);
 
   useEffect(() => {
     void loadManifest();
@@ -133,16 +210,22 @@ export function useChunkManager() {
         (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
       );
 
-      cache.set(chunkId, items);
-      console.log('[ChunkManager] Chunk loaded:', chunkId, 'items:', items.length);
+      const pending = pendingLiveRef.current.get(chunkId);
+      const mergedItems = pending ? mergeThreatLists(items, pending) : items;
+      if (pending) {
+        pendingLiveRef.current.delete(chunkId);
+      }
+
+      cache.set(chunkId, mergedItems);
+      console.log('[ChunkManager] Chunk loaded:', chunkId, 'items:', mergedItems.length);
       evictIfNeeded(chunkId);
-      return items;
+      return mergedItems;
     } finally {
       if (!options.silent) {
         setIsLoading(false);
       }
     }
-  }, [evictIfNeeded]);
+  }, [evictIfNeeded, mergeThreatLists]);
 
   // Prefetch neighboring chunks for smoother scrubbing
   const prefetchNeighbors = useCallback((chunkId: string) => {
@@ -212,32 +295,44 @@ export function useChunkManager() {
 
     const chunkId = getChunkForTime(threatMs);
     if (!chunkId) {
+      const alertId = threat.alert_id;
+      if (!alertId || outOfWindowIdsRef.current.has(alertId)) {
+        return;
+      }
+
+      outOfWindowIdsRef.current.add(alertId);
+      outOfWindowLiveRef.current.push(threat);
+
+      while (outOfWindowLiveRef.current.length > MAX_LIVE_BUFFER_SIZE) {
+        const removed = outOfWindowLiveRef.current.shift();
+        if (removed?.alert_id) {
+          outOfWindowIdsRef.current.delete(removed.alert_id);
+        }
+      }
+
+      if (outOfWindowLiveRef.current.length >= MAX_LIVE_BUFFER_SIZE) {
+        void triggerOverflowRefresh();
+      }
       return;
     }
 
     const cache = cacheRef.current;
     const cached = cache.get(chunkId);
-    if (!cached) {
+    if (cached) {
+      const next = mergeThreatLists(cached, [threat]);
+      if (next !== cached) {
+        cache.set(chunkId, next);
+        setCacheSize(cache.size);
+        console.log('[ChunkManager] Live threat added to chunk:', chunkId);
+      }
       return;
     }
 
-    const exists = cached.some((item) => item.alert_id === threat.alert_id);
-    if (exists) {
-      return;
-    }
-
-    const next = [...cached, threat].sort(
-      (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
-    );
-
-    while (next.length > MAX_THREATS_PER_CHUNK) {
-      next.shift();
-    }
-
-    cache.set(chunkId, next);
-    setCacheSize(cache.size);
-    console.log('[ChunkManager] Live threat added to chunk:', chunkId);
-  }, [getChunkForTime]);
+    const pending = pendingLiveRef.current.get(chunkId) ?? [];
+    const nextPending = mergeThreatLists(pending, [threat]);
+    pendingLiveRef.current.set(chunkId, nextPending);
+    console.log('[ChunkManager] Live threat queued for chunk:', chunkId);
+  }, [getChunkForTime, triggerOverflowRefresh]);
 
   return useMemo(
     () => ({
@@ -248,7 +343,8 @@ export function useChunkManager() {
       cacheSize,
       getChunkForTime,
       insertLiveThreat,
+      refreshManifest: loadManifest,
     }),
-    [cacheSize, currentChunkId, getChunkForTime, getThreatsAtTime, insertLiveThreat, isLoading, manifest]
+    [cacheSize, currentChunkId, getChunkForTime, getThreatsAtTime, insertLiveThreat, isLoading, loadManifest, manifest]
   );
 }

@@ -10,7 +10,7 @@ import {
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { MoreVertical, Plus, RotateCcw } from "lucide-react";
+import { Plus, RotateCcw } from "lucide-react";
 import { PencilIcon, MapPinIcon } from "@heroicons/react/16/solid";
 import { useSensors } from "../context/SensorContext";
 import { useMapNavigation } from "../context/MapNavigationContext";

@@ -20,6 +20,7 @@ const PLAYBACK_BUCKET_MS = 5 * 60 * 1000;
 const PLAYBACK_TICK_INTERVAL_MS = 200;
 const PLAYBACK_BASE_ADVANCE_MS = 30 * 1000;
 const PLAYBACK_FETCH_THROTTLE_MS = 250;
+const MANIFEST_REFRESH_MS = 15 * 60 * 1000;
 const SCRUB_THROTTLE_MS = 100;
 const SCRUB_DEBOUNCE_MS = 300;
 
@@ -95,6 +96,7 @@ export function Dashboard() {
     currentChunkId,
     cacheSize,
     insertLiveThreat,
+    refreshManifest,
   } = useChunkManager();
 
   const [isPlaybackMode, setIsPlaybackMode] = useState(false);
@@ -112,8 +114,13 @@ export function Dashboard() {
   const scrubThrottleRef = useRef(0);
   const scrubDebounceRef = useRef<number | null>(null);
   const playbackFetchThrottleRef = useRef(0);
+  const liveThreatsRef = useRef(liveThreats);
 
   const playbackLoading = isChunkLoading;
+
+  useEffect(() => {
+    liveThreatsRef.current = liveThreats;
+  }, [liveThreats]);
 
   // Fetch cached threats near the selected playback time.
   const loadThreatsForTime = useCallback(
@@ -139,14 +146,48 @@ export function Dashboard() {
     const startMs = new Date(manifest[0].start_time).getTime();
     const endMs = new Date(manifest[manifest.length - 1].end_time).getTime();
 
-    if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
-      setPlaybackWindowStartMs(startMs);
-      setPlaybackWindowEndMs(endMs);
-      setPlaybackCursorMs((previous) => previous ?? startMs);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) {
+      return;
+    }
+
+    setPlaybackWindowStartMs(startMs);
+    setPlaybackWindowEndMs(endMs);
+    setPlaybackCursorMs((previous) => {
+      if (previous === null) {
+        return startMs;
+      }
+      if (previous < startMs) {
+        return startMs;
+      }
+      if (previous > endMs) {
+        return endMs;
+      }
+      return previous;
+    });
+
+    if (isPlaybackMode) {
+      processedLiveThreatIdsRef.current = new Set(
+        liveThreatsRef.current.map((threat) => threat.alert_id)
+      );
       playbackLiveCountRef.current = 0;
       setPlaybackLiveCount(0);
     }
-  }, [manifest]);
+  }, [isPlaybackMode, manifest]);
+
+  useEffect(() => {
+    if (!isPlaybackMode) {
+      return;
+    }
+
+    void refreshManifest();
+    const timer = window.setInterval(() => {
+      void refreshManifest();
+    }, MANIFEST_REFRESH_MS);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [isPlaybackMode, refreshManifest]);
 
   // Enter playback mode and load the initial chunk.
   const handleStartPlayback = useCallback(async () => {
