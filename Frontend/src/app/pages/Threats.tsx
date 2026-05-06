@@ -250,7 +250,7 @@ export function Threats() {
   const fetchAvailableThreatTypes = useCallback(async (sensorTypes: string[] = []) => {
     try {
       const params = new URLSearchParams();
-      params.append("page_size", "1000"); // Get more threats to extract unique types
+      params.append("page_size", "200"); // Get more threats to extract unique types
       
       // If specific sensor types are selected, filter by them
       sensorTypes.forEach(type => {

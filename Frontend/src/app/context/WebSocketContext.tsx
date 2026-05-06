@@ -48,10 +48,6 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      if (message.type === 'THREAT_SUMMARY_UPDATE') {
-        setThreatSummary(message.payload as ThreatSummaryOut)
-        return
-      }
 
       if (message.type === 'NEW_THREAT') {
         // Only process threats with valid alert_id

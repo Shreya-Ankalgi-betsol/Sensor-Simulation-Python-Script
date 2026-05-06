@@ -407,9 +407,12 @@ class ThreatService:
         # Broadcast threat to all connected WebSocket clients in frontend format
         await session_manager.broadcast_threat(alert_data)
 
-        # Broadcast updated summary stats
+        # Broadcast updated summary stats (do not block DB commit on WS errors)
         if db:
-            await self.broadcast_summary_update(db)
+            try:
+                await self.broadcast_summary_update(db)
+            except Exception:
+                pass
 
     async def get_threat_summary(
         self, filters: ThreatFilter, db: AsyncSession

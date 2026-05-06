@@ -41,6 +41,7 @@ class SensorOut(BaseModel):
 
 #summary
 class SensorSummaryOut(BaseModel):
+    model_config = {"from_attributes": True}
     total_count: int
     active_count: int
     inactive_count: int

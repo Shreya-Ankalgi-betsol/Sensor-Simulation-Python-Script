@@ -1,5 +1,5 @@
+
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,12 +24,12 @@ router = APIRouter(
 
 
 def build_filters(
-    from_dt: Optional[datetime],
-    to_dt: Optional[datetime],
-    location: Optional[list[str]],
-    sensor_type: Optional[list[SensorType]],
-    severity: Optional[list[ThreatSeverity]],
-    threat_type: Optional[list[str]],
+    from_dt: datetime | None,
+    to_dt: datetime | None,
+    location: list[str] | None,
+    sensor_type: list[SensorType] | None,
+    severity: list[ThreatSeverity] | None,
+    threat_type: list[str] | None,
     bucket_by: BucketBy = BucketBy.hour,
 ) -> AnalyticsFilter:
     return AnalyticsFilter(
@@ -55,12 +55,12 @@ def build_filters(
 )
 async def threat_timeline(
     bucket_by: BucketBy = Query(default=BucketBy.hour, description="minute, hour or day"),
-    from_dt: Optional[datetime] = Query(default=None, description="Start datetime (ISO 8601 UTC)"),
-    to_dt: Optional[datetime] = Query(default=None, description="End datetime (ISO 8601 UTC)"),
-    location: Optional[list[str]] = Query(default=None, description="Sensor location e.g. Main gate"),
-    sensor_type: Optional[list[SensorType]] = Query(default=None, description="radar or lidar"),
-    severity: Optional[list[ThreatSeverity]] = Query(default=None, description="low, med, high, critical"),
-    threat_type: Optional[list[str]] = Query(default=None, description="e.g. drone, person, vehicle"),
+    from_dt: datetime | None = Query(default=None, description="Start datetime (ISO 8601 UTC)"),
+    to_dt: datetime | None = Query(default=None, description="End datetime (ISO 8601 UTC)"),
+    location: list[str] | None = Query(default=None, description="Sensor location e.g. Main gate"),
+    sensor_type: list[SensorType] | None = Query(default=None, description="radar or lidar"),
+    severity: list[ThreatSeverity] | None = Query(default=None, description="low, med, high, critical"),
+    threat_type: list[str] | None = Query(default=None, description="e.g. drone, person, vehicle"),
     db: AsyncSession = Depends(get_db),
 ) -> ThreatTimelineOut:
     filters = build_filters(
@@ -80,12 +80,12 @@ async def threat_timeline(
     ),
 )
 async def threats_per_sensor(
-    from_dt: Optional[datetime] = Query(default=None, description="Start datetime (ISO 8601 UTC)"),
-    to_dt: Optional[datetime] = Query(default=None, description="End datetime (ISO 8601 UTC)"),
-    location: Optional[list[str]] = Query(default=None, description="Sensor location e.g. Main gate"),
-    sensor_type: Optional[list[SensorType]] = Query(default=None, description="radar or lidar"),
-    severity: Optional[list[ThreatSeverity]] = Query(default=None, description="low, med, high, critical"),
-    threat_type: Optional[list[str]] = Query(default=None, description="e.g. drone, person, vehicle"),
+    from_dt: datetime | None = Query(default=None, description="Start datetime (ISO 8601 UTC)"),
+    to_dt: datetime | None = Query(default=None, description="End datetime (ISO 8601 UTC)"),
+    location: list[str] | None = Query(default=None, description="Sensor location e.g. Main gate"),
+    sensor_type: list[SensorType] | None = Query(default=None, description="radar or lidar"),
+    severity: list[ThreatSeverity] | None = Query(default=None, description="low, med, high, critical"),
+    threat_type: list[str] | None = Query(default=None, description="e.g. drone, person, vehicle"),
     db: AsyncSession = Depends(get_db),
 ) -> ThreatsPerSensorOut:
     filters = build_filters(
@@ -105,12 +105,12 @@ async def threats_per_sensor(
     ),
 )
 async def severity_breakdown(
-    from_dt: Optional[datetime] = Query(default=None, description="Start datetime (ISO 8601 UTC)"),
-    to_dt: Optional[datetime] = Query(default=None, description="End datetime (ISO 8601 UTC)"),
-    location: Optional[list[str]] = Query(default=None, description="Sensor location e.g. Main gate"),
-    sensor_type: Optional[list[SensorType]] = Query(default=None, description="radar or lidar"),
-    severity: Optional[list[ThreatSeverity]] = Query(default=None, description="low, med, high, critical"),
-    threat_type: Optional[list[str]] = Query(default=None, description="e.g. drone, person, vehicle"),
+    from_dt: datetime | None = Query(default=None, description="Start datetime (ISO 8601 UTC)"),
+    to_dt: datetime | None = Query(default=None, description="End datetime (ISO 8601 UTC)"),
+    location: list[str] | None = Query(default=None, description="Sensor location e.g. Main gate"),
+    sensor_type: list[SensorType] | None = Query(default=None, description="radar or lidar"),
+    severity: list[ThreatSeverity] | None = Query(default=None, description="low, med, high, critical"),
+    threat_type: list[str] | None = Query(default=None, description="e.g. drone, person, vehicle"),
     db: AsyncSession = Depends(get_db),
 ) -> SeverityBreakdownOut:
     filters = build_filters(
@@ -130,12 +130,12 @@ async def severity_breakdown(
     ),
 )
 async def threat_type_breakdown(
-    from_dt: Optional[datetime] = Query(default=None, description="Start datetime (ISO 8601 UTC)"),
-    to_dt: Optional[datetime] = Query(default=None, description="End datetime (ISO 8601 UTC)"),
-    location: Optional[list[str]] = Query(default=None, description="Sensor location e.g. Main gate"),
-    sensor_type: Optional[list[SensorType]] = Query(default=None, description="radar or lidar"),
-    severity: Optional[list[ThreatSeverity]] = Query(default=None, description="low, med, high, critical"),
-    threat_type: Optional[list[str]] = Query(default=None, description="e.g. drone, person, vehicle"),
+    from_dt: datetime | None = Query(default=None, description="Start datetime (ISO 8601 UTC)"),
+    to_dt: datetime | None = Query(default=None, description="End datetime (ISO 8601 UTC)"),
+    location: list[str] | None = Query(default=None, description="Sensor location e.g. Main gate"),
+    sensor_type: list[SensorType] | None = Query(default=None, description="radar or lidar"),
+    severity: list[ThreatSeverity] | None = Query(default=None, description="low, med, high, critical"),
+    threat_type: list[str] | None = Query(default=None, description="e.g. drone, person, vehicle"),
     db: AsyncSession = Depends(get_db),
 ) -> ThreatTypeBreakdownOut:
     filters = build_filters(

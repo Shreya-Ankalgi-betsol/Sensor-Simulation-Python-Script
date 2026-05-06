@@ -1,10 +1,7 @@
-from datetime import datetime
-from typing import Optional
-
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.sensor import Sensor, SensorType
+from app.models.sensor import Sensor
 from app.models.threat_log import ThreatLog, ThreatSeverity
 from app.schemas.analytics import (
     AnalyticsFilter,
@@ -22,42 +19,19 @@ from app.schemas.analytics import (
 
 class AnalyticsService:
 
-    # ── A: Threat timeline 
+    # ── Shared helpers 
 
-    async def get_threat_timeline(
-    self,
-    filters: AnalyticsFilter,
-    db: AsyncSession,
-) -> ThreatTimelineOut:
+    def _needs_sensor_join(self, filters: AnalyticsFilter) -> bool:
+        """Check if Sensor table needs to be joined based on active filters."""
+        return bool(filters.location or filters.sensor_type)
 
-        needs_sensor_join = (
-            filters.location or
-            filters.sensor_type
-        )
-
-        # Choose bucket expression based on bucket_by
-        if filters.bucket_by == BucketBy.minute:
-            bucket_expr = func.date_trunc("minute", ThreatLog.timestamp)
-        elif filters.bucket_by == BucketBy.day:
-            bucket_expr = func.date_trunc("day", ThreatLog.timestamp)
-        else:
-            bucket_expr = func.date_trunc("hour", ThreatLog.timestamp)
-
-        # Build query
-        query = select(
-            bucket_expr.label("bucket"),
-            func.count(ThreatLog.alert_id).label("count"),
-        ).select_from(ThreatLog)
-
-        # JOIN sensors if location or sensor_type filter is active
-        if needs_sensor_join:
-            query = query.join(Sensor, ThreatLog.sensor_id == Sensor.sensor_id)
-
-        # Apply filters
-        if filters.location:
-            query = query.where(Sensor.location.in_(filters.location))
-        if filters.sensor_type:
-            query = query.where(Sensor.sensor_type.in_(filters.sensor_type))
+    def _apply_filters(self, query, filters: AnalyticsFilter, sensor_joined: bool):
+        """Apply all active filters to the query in one place."""
+        if sensor_joined:
+            if filters.location:
+                query = query.where(Sensor.location.in_(filters.location))
+            if filters.sensor_type:
+                query = query.where(Sensor.sensor_type.in_(filters.sensor_type))
         if filters.severity:
             query = query.where(ThreatLog.severity.in_(filters.severity))
         if filters.threat_type:
@@ -66,7 +40,35 @@ class AnalyticsService:
             query = query.where(ThreatLog.timestamp >= filters.from_dt)
         if filters.to_dt is not None:
             query = query.where(ThreatLog.timestamp <= filters.to_dt)
+        return query
 
+    # ── A: Threat timeline ────────────────────────────────────────────────────
+
+    async def get_threat_timeline(
+        self,
+        filters: AnalyticsFilter,
+        db: AsyncSession,
+    ) -> ThreatTimelineOut:
+
+        # Optimization 1 & 2: extracted to shared helpers
+        needs_sensor_join = self._needs_sensor_join(filters)
+
+        if filters.bucket_by == BucketBy.minute:
+            bucket_expr = func.date_trunc("minute", ThreatLog.timestamp)
+        elif filters.bucket_by == BucketBy.day:
+            bucket_expr = func.date_trunc("day", ThreatLog.timestamp)
+        else:
+            bucket_expr = func.date_trunc("hour", ThreatLog.timestamp)
+
+        query = select(
+            bucket_expr.label("bucket"),
+            func.count(ThreatLog.alert_id).label("count"),
+        ).select_from(ThreatLog)
+
+        if needs_sensor_join:
+            query = query.join(Sensor, ThreatLog.sensor_id == Sensor.sensor_id)
+
+        query = self._apply_filters(query, filters, needs_sensor_join)
         query = query.group_by(bucket_expr).order_by(bucket_expr.asc())
 
         result = await db.execute(query)
@@ -83,8 +85,7 @@ class AnalyticsService:
             ],
         )
 
-
-    # ── B: Threats per sensor 
+    # ── B: Threats per sensor ─────────────────────────────────────────────────
 
     async def get_threats_per_sensor(
         self,
@@ -92,81 +93,26 @@ class AnalyticsService:
         db: AsyncSession,
     ) -> ThreatsPerSensorOut:
 
-        # Get all sensors — apply location and sensor_type filters
-        sensor_query = select(Sensor)
-        if filters.location:
-            sensor_query = sensor_query.where(Sensor.location.in_(filters.location))
-        if filters.sensor_type:
-            sensor_query = sensor_query.where(Sensor.sensor_type.in_(filters.sensor_type))
-
-        sensors_result = await db.execute(sensor_query)
-        all_sensors = sensors_result.scalars().all()
-
-        # Get threat counts — apply all filters
-        threat_query = (
-            select(
-                ThreatLog.sensor_id,
-                func.count(ThreatLog.alert_id).label("count"),
-            )
-            .join(Sensor, ThreatLog.sensor_id == Sensor.sensor_id)
-            .group_by(ThreatLog.sensor_id)
-        )
-
-        if filters.location:
-            threat_query = threat_query.where(Sensor.location.in_(filters.location))
-        if filters.sensor_type:
-            threat_query = threat_query.where(Sensor.sensor_type.in_(filters.sensor_type))
-        if filters.severity:
-            threat_query = threat_query.where(ThreatLog.severity.in_(filters.severity))
-        if filters.threat_type:
-            threat_query = threat_query.where(ThreatLog.threat_type.in_(filters.threat_type))
-        if filters.from_dt is not None:
-            threat_query = threat_query.where(ThreatLog.timestamp >= filters.from_dt)
-        if filters.to_dt is not None:
-            threat_query = threat_query.where(ThreatLog.timestamp <= filters.to_dt)
-
-        threat_result = await db.execute(threat_query)
-        threat_counts = {row.sensor_id: row.count for row in threat_result.all()}
-
-        return ThreatsPerSensorOut(
-            data=[
-                ThreatPerSensorPoint(
-                    sensor_id=s.sensor_id,
-                    sensor_type=s.sensor_type,
-                    location=s.location,
-                    count=threat_counts.get(s.sensor_id, 0),
-                )
-                for s in all_sensors
-            ]
-        )
-
-    # ── C: Severity breakdown 
-
-    async def get_severity_breakdown(
-        self,
-        filters: AnalyticsFilter,
-        db: AsyncSession,
-    ) -> SeverityBreakdownOut:
-
-        needs_sensor_join = (
-            filters.location or
-            filters.sensor_type
-        )
-
+        # Optimization 3: single query using outerjoin instead of 2 db calls
+        # outerjoin ensures sensors with zero threats still appear with count=0
         query = (
             select(
-                ThreatLog.severity,
+                Sensor.sensor_id,
+                Sensor.sensor_type,
+                Sensor.location,
                 func.count(ThreatLog.alert_id).label("count"),
             )
+            .outerjoin(ThreatLog, Sensor.sensor_id == ThreatLog.sensor_id)
+            .group_by(Sensor.sensor_id, Sensor.sensor_type, Sensor.location)
         )
 
-        if needs_sensor_join:
-            query = query.join(Sensor, ThreatLog.sensor_id == Sensor.sensor_id)
-
+        # Apply sensor-level filters directly (sensor is the base table here)
         if filters.location:
             query = query.where(Sensor.location.in_(filters.location))
         if filters.sensor_type:
             query = query.where(Sensor.sensor_type.in_(filters.sensor_type))
+
+        # Apply threat-level filters
         if filters.severity:
             query = query.where(ThreatLog.severity.in_(filters.severity))
         if filters.threat_type:
@@ -176,12 +122,49 @@ class AnalyticsService:
         if filters.to_dt is not None:
             query = query.where(ThreatLog.timestamp <= filters.to_dt)
 
+        result = await db.execute(query)
+        rows = result.all()
+
+        return ThreatsPerSensorOut(
+            data=[
+                ThreatPerSensorPoint(
+                    sensor_id=row.sensor_id,
+                    sensor_type=row.sensor_type,
+                    location=row.location,
+                    count=row.count,
+                )
+                for row in rows
+            ]
+        )
+
+    # ── C: Severity breakdown ─────────────────────────────────────────────────
+
+    async def get_severity_breakdown(
+        self,
+        filters: AnalyticsFilter,
+        db: AsyncSession,
+    ) -> SeverityBreakdownOut:
+
+        needs_sensor_join = self._needs_sensor_join(filters)
+
+        # Optimization 4: total calculated in DB using window function over()
+        # instead of summing in Python after fetching
+        query = select(
+            ThreatLog.severity,
+            func.count(ThreatLog.alert_id).label("count"),
+            func.sum(func.count(ThreatLog.alert_id)).over().label("total"),
+        )
+
+        if needs_sensor_join:
+            query = query.join(Sensor, ThreatLog.sensor_id == Sensor.sensor_id)
+
+        query = self._apply_filters(query, filters, needs_sensor_join)
+
         query = (
             query
             .group_by(ThreatLog.severity)
             .order_by(
                 case(
-                    
                     (ThreatLog.severity == ThreatSeverity.high, 1),
                     (ThreatLog.severity == ThreatSeverity.med, 2),
                     (ThreatLog.severity == ThreatSeverity.low, 3),
@@ -191,7 +174,9 @@ class AnalyticsService:
 
         result = await db.execute(query)
         rows = result.all()
-        total = sum(row.count for row in rows)
+
+        # total is the same on every row — just read it from the first row
+        total = rows[0].total if rows else 0
 
         return SeverityBreakdownOut(
             total=total,
@@ -212,31 +197,19 @@ class AnalyticsService:
         db: AsyncSession,
     ) -> ThreatTypeBreakdownOut:
 
-        needs_sensor_join = (
-            filters.location or
-            filters.sensor_type
-        )
+        needs_sensor_join = self._needs_sensor_join(filters)
 
+        # Optimization 4: same window function approach for total
         query = select(
             ThreatLog.threat_type,
             func.count(ThreatLog.alert_id).label("count"),
+            func.sum(func.count(ThreatLog.alert_id)).over().label("total"),
         )
 
         if needs_sensor_join:
             query = query.join(Sensor, ThreatLog.sensor_id == Sensor.sensor_id)
 
-        if filters.location:
-            query = query.where(Sensor.location.in_(filters.location))
-        if filters.sensor_type:
-            query = query.where(Sensor.sensor_type.in_(filters.sensor_type))
-        if filters.severity:
-            query = query.where(ThreatLog.severity.in_(filters.severity))
-        if filters.threat_type:
-            query = query.where(ThreatLog.threat_type.in_(filters.threat_type))
-        if filters.from_dt is not None:
-            query = query.where(ThreatLog.timestamp >= filters.from_dt)
-        if filters.to_dt is not None:
-            query = query.where(ThreatLog.timestamp <= filters.to_dt)
+        query = self._apply_filters(query, filters, needs_sensor_join)
 
         query = (
             query
@@ -246,7 +219,8 @@ class AnalyticsService:
 
         result = await db.execute(query)
         rows = result.all()
-        total = sum(row.count for row in rows)
+
+        total = rows[0].total if rows else 0
 
         return ThreatTypeBreakdownOut(
             total=total,

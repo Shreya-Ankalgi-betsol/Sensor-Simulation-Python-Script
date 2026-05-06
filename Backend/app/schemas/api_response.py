@@ -25,8 +25,8 @@ class ApiResponse(BaseModel, Generic[T]):
     error: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
-    class Config:
-        json_schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "success": True,
                 "data": {"sensor_id": "sensor_01", "status": "active"},
@@ -34,6 +34,7 @@ class ApiResponse(BaseModel, Generic[T]):
                 "timestamp": "2026-04-06T10:30:00"
             }
         }
+    }
 
 
 class ApiErrorResponse(BaseModel):
@@ -43,8 +44,8 @@ class ApiErrorResponse(BaseModel):
     details: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
-    class Config:
-        json_schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "success": False,
                 "error": "Sensor not found",
@@ -52,3 +53,4 @@ class ApiErrorResponse(BaseModel):
                 "timestamp": "2026-04-06T10:30:00"
             }
         }
+    }

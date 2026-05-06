@@ -51,14 +51,7 @@ async def create_tables():
         # Step 1 — Create all tables
         await conn.run_sync(Base.metadata.create_all)
 
-        # Step 1.1 — Enforce unique coordinates for sensors
-        await conn.execute(
-            text(
-                "CREATE UNIQUE INDEX IF NOT EXISTS uq_sensors_lat_lng "
-                "ON sensors (lat, lng);"
-            )
-        )
-
+        
         # Step 2 — Convert to hypertables
         await conn.execute(
             text(
@@ -73,52 +66,4 @@ async def create_tables():
             )
         )
 
-        # Step 3 — Add nullable object geolocation fields to threat logs.
-        await conn.execute(
-            text(
-                "ALTER TABLE threat_logs "
-                "ADD COLUMN IF NOT EXISTS object_lat DOUBLE PRECISION;"
-            )
-        )
-        await conn.execute(
-            text(
-                "ALTER TABLE threat_logs "
-                "ADD COLUMN IF NOT EXISTS object_lng DOUBLE PRECISION;"
-            )
-        )
-        await conn.execute(
-            text(
-                "ALTER TABLE threat_logs "
-                "ADD COLUMN IF NOT EXISTS object_bearing_deg DOUBLE PRECISION;"
-            )
-        )
-        await conn.execute(
-            text(
-                "ALTER TABLE threat_logs "
-                "ADD COLUMN IF NOT EXISTS object_range_m DOUBLE PRECISION;"
-            )
-        )
-        await conn.execute(
-            text(
-                "ALTER TABLE threat_logs "
-                "ADD COLUMN IF NOT EXISTS track_id VARCHAR;"
-            )
-        )
-        await conn.execute(
-            text(
-                "ALTER TABLE threat_logs "
-                "ADD COLUMN IF NOT EXISTS object_type VARCHAR;"
-            )
-        )
-        await conn.execute(
-            text(
-                "ALTER TABLE threat_logs "
-                "ADD COLUMN IF NOT EXISTS object_state VARCHAR;"
-            )
-        )
-        await conn.execute(
-            text(
-                "CREATE INDEX IF NOT EXISTS idx_threat_logs_track_id "
-                "ON threat_logs (track_id);"
-            )
-        )
+        

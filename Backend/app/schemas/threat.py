@@ -58,6 +58,7 @@ class ThreatFilter(BaseModel):
     
 # Summary     
 class ThreatSummaryOut(BaseModel):
+    model_config = {"from_attributes": True}
     total_threats: int
     high_severity_count: int
     active_sensor_count: int

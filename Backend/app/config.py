@@ -2,20 +2,21 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    app_name: str = "Sensor Simulation"
-    debug: bool = True
+    app_name: str 
+    debug: bool 
 
     # Database
-    db_user: str = "sensor"
-    db_password: str = "sensor_pass"
-    db_host: str = "127.0.0.1"
-    db_port: int = 5432
-    db_name: str = "sensor_simulation"
+    db_user: str 
+    db_password: str 
+    db_host: str 
+    db_port: int 
+    db_name: str 
 
     # TCP Ingest
-    tcp_ingest_enabled: bool = True
-    tcp_ingest_host: str = "127.0.0.1"
-    tcp_ingest_port: int = 9000
+    tcp_ingest_enabled: bool
+    tcp_ingest_host: str
+    tcp_ingest_port: int
+
 
     @property
     def database_url(self) -> str:

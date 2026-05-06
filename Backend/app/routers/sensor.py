@@ -11,7 +11,6 @@ router = APIRouter(
 )
 
 
-
 @router.get(
     "/summary",
     response_model=SensorSummaryOut,

@@ -4,95 +4,9 @@ This document provides a detailed reference for the backend API, including schem
 
 ---
 
-## 1. Schemas
 
-Pydantic schemas, located in `app/schemas/`, define the data contracts for the API. They are used for request validation, response serialization, and generating OpenAPI documentation.
 
-**Sensor Schemas (`sensor.py`)**
-*   **`SensorCreate` (Request)**: Used to create a new sensor.
-    *   Fields: `sensor_id`, `sensor_type`, `lat`, `lng`, `location`, `coverage_radius_m`.
-*   **`SensorUpdate` (Request)**: Used to update an existing sensor's mutable properties.
-    *   Fields: `lat`, `lng`, `location`, `coverage_radius_m` (all optional).
-*   **`SensorOut` (Response)**: The standard representation of a sensor.
-    *   Fields: `sensor_id`, `sensor_type`, `status`, `lat`, `lng`, `location`, `coverage_radius_m`, `last_ping`, `created_at`.
-*   **`SensorSummaryOut` (Response)**: Provides a high-level count of sensors by their status.
-    *   Fields: `total_count`, `active_count`, `inactive_count`, `error_count`.
-
-**Threat Schemas (`threat.py`)**
-*   **`ThreatOut` (Response)**: The standard representation of a single threat log.
-    *   Fields: `alert_id`, `sensor_id`, `sensor_type`, `threat_type`, `confidence`, `severity`, `timestamp`.
-*   **`PagedThreats` (Response)**: The wrapper for the paginated list of threats.
-    *   Fields: `items` (a list of `ThreatOut`), `total`, `next_cursor`, `has_more`.
-*   **`ThreatFilter` (Query Params)**: Defines the filters for querying the threat list.
-    *   Fields: `sensor_type`, `sensor_id`, `threat_type`, `severity`, `from_dt`, `to_dt`, `page_size`, `cursor`.
-
-**Analytics Schemas (`analytics.py`)**
-*   **`AnalyticsFilter` (Query Params)**: Defines the shared filters for all analytics endpoints.
-    *   Fields: `from_dt`, `to_dt`, `location`, `sensor_type`, `severity`, `threat_type`, `bucket_by`.
-*   **`ThreatTimelineOut` (Response)**: The response for the threat timeline graph.
-    *   Fields: `data` (list of `bucket` and `count`), `bucket_by`.
-*   **`ThreatsPerSensorOut` (Response)**: The response for the threats-per-sensor breakdown.
-    *   Fields: `data` (list of `sensor_id`, `sensor_type`, `location`, `count`).
-*   **`SeverityBreakdownOut` (Response)**: Provides a count of threats for each severity level.
-    *   Fields: `data` (list of `severity` and `count`).
-*   **`ThreatTypeBreakdownOut` (Response)**: Provides a count of threats for each threat type.
-    *   Fields: `data` (list of `threat_type` and `count`).
-
-**User Schemas (`user.py`)**
-*   **`UserCreate` (Request)**: Used to register a new user.
-    *   Fields: `username`, `email`, `password`.
-*   **`UserUpdate` (Request)**: Used to update a user's profile information.
-    *   Fields: `username`, `email` (both optional).
-*   **`PasswordChange` (Request)**: Used to change a user's password.
-    *   Fields: `old_password`, `new_password`.
-*   **`UserOut` (Response)**: The standard, safe representation of a user.
-    *   Fields: `user_id`, `username`, `email`, `role`.
-
-## 2. Services
-
-The service layer (`app/services/`) implements the core business logic, acting as the bridge between the API endpoints (routers) and the database (models).
-
-**`SensorService` (`sensor_service.py`)**
-*   **Purpose**: Manages the lifecycle of sensor objects.
-*   **Methods**:
-    *   `get_all_sensors`: Retrieves a list of all registered sensors.
-    *   `get_sensor`: Fetches a single sensor by its ID.
-    *   `create_sensor`: Creates a new sensor, ensuring no duplicate ID or location exists.
-    *   `update_sensor`: Updates the properties of an existing sensor.
-    *   `get_sensor_summary`: Returns a high-level summary of sensor counts by status.
-
-**`ThreatService` (`threat_service.py`)**
-*   **Purpose**: Handles logic related to querying and managing threat logs.
-*   **Methods**:
-    *   `get_threats`: Retrieves a paginated and filterable list of historical threats using the cursor-based pagination strategy.
-    *   `push_alert`: A utility method that broadcasts a new threat alert to all connected WebSocket clients.
-    *   `get_threat_summary`: Returns a high-level summary of threat counts.
-
-**`AnalyticsService` (`analytics_service.py`)**
-*   **Purpose**: Provides methods for aggregating and summarizing threat data for analytics and dashboard visualizations.
-*   **Methods**:
-    *   `get_threat_timeline`: Aggregates threat counts over time, allowing them to be bucketed by minute, hour, or day.
-    *   `get_threats_per_sensor`: Calculates the total number of threats detected by each sensor.
-    *   `get_severity_breakdown`: Groups threat counts by their severity level (`low`, `med`, `high`).
-    *   `get_threat_type_breakdown`: Groups threat counts by their specific type.
-
-**`UserService` (`user_service.py`)**
-*   **Purpose**: Manages user accounts and authentication-related logic.
-*   **Methods**:
-    *   `create_user`: Creates a new user. (Note: Hashing logic for the password is not implemented in this service).
-    *   `get_user`: Retrieves a user's profile by their ID.
-    *   `update_user`: Updates a user's username or email.
-    *   `change_password`: Changes a user's password after verifying the old one.
-
-**`SessionManager` (`ws_session_manager.py`)**
-*   **Purpose**: Manages all active WebSocket connections for real-time communication.
-*   **Methods**:
-    *   `connect`: Handles a new client connecting to the WebSocket.
-    *   `disconnect`: Cleans up after a client disconnects.
-    *   `send_to_client`: Sends a message to a single, specific WebSocket client.
-    *   `broadcast`: Sends a message to all currently connected WebSocket clients. This is used for system-wide notifications like new alerts.
-
-## 3. API Endpoints
+## 1. API Endpoints
 
 This section provides a detailed reference for the backend API.
 
@@ -379,6 +293,70 @@ Returns the full sensor object.
 ---
 
 
+#### **Ingest a sensor payload**
+
+Ingests a single radar or lidar payload, runs threat detection, stores results, and updates the sensor's activity status.
+
+**Method**: `POST`
+**Path**: `/api/v1/ingest/sensor`
+
+---
+
+##### **Request**
+
+**Request Body (`application/json`)**
+
+```json
+{
+  "sensor_id": "RADAR-001",
+  "type": "radar",
+  "timestamp": "2026-04-08T12:00:00Z",
+  "raw_detection": {
+    "range_m": 1200.5,
+    "azimuth_deg": 45.1,
+    "elevation_deg": 2.5,
+    "radial_velocity_mps": -5.2,
+    "rcs_dbsm": 12.3,
+    "snr_db": 18.7
+  },
+  "lat": 34.0522,
+  "lng": -118.2437,
+  "location": "Main Gate"
+}
+```
+
+**Request Body Fields**
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `sensor_id` | string | Yes | The unique identifier for the sensor. |
+| `type` | string | Yes | The type of sensor. Must be `radar` or `lidar`. |
+| `timestamp` | string (datetime) | Yes | The timestamp of the reading in UTC. |
+| `raw_detection` | object | Yes | The raw detection payload from the sensor. |
+| `lat` | number | No | Optional latitude override for the sensor. |
+| `lng` | number | No | Optional longitude override for the sensor. |
+| `location` | string | No | Optional location override for the sensor. |
+
+---
+
+##### **Response**
+
+**Success Response (`200 OK`)**
+
+```json
+{
+  "sensor_id": "RADAR-001",
+  "sensor_type": "radar",
+  "sensor_status": "active",
+  "detected_objects": 2,
+  "saved_threats": 1,
+  "timestamp": "2026-04-08T12:00:00Z"
+}
+```
+
+---
+
+
 ### Threats
 
 #### **Get all threats**
@@ -396,13 +374,13 @@ Returns a cursor-paginated list of historical threats. The endpoint supports a v
 
 | Parameter | Type | Description |
 | :--- | :--- | :--- |
-| `sensor_type` | string | Filter by sensor type (e.g., `radar`, `lidar`). |
-| `sensor_id` | string | Filter by a specific sensor's ID. |
-| `threat_type` | string | Filter by a specific threat type (e.g., `drone`). |
-| `severity` | string | Filter by severity level (`low`, `med`, `high`). |
+| `sensor_type` | array[string] | Filter by one or more sensor types (e.g., `radar`, `lidar`). |
+| `sensor_id` | array[string] | Filter by one or more sensor IDs. |
+| `threat_type` | array[string] | Filter by one or more threat types (e.g., `drone`). |
+| `severity` | array[string] | Filter by one or more severity levels (`low`, `med`, `high`). |
 | `from_dt` | string | ISO 8601 UTC timestamp to start the time range filter. |
 | `to_dt` | string | ISO 8601 UTC timestamp to end the time range filter. |
-| `page_size` | integer | The number of items to return per page. Defaults to `20`. |
+| `page_size` | integer | The number of items to return per page. Defaults to `20` (min 1, max 200). |
 | `cursor` | string | The `next_cursor` value from a previous response to fetch the next page. |
 
 ---
@@ -420,13 +398,22 @@ Returns a `PagedThreats` object containing the list of threats and pagination de
       "alert_id": "uuid-for-threat-1",
       "sensor_id": "RADAR-001",
       "sensor_type": "radar",
+      "track_id": "track-9",
+      "object_type": "drone",
+      "object_state": "tracking",
       "threat_type": "drone",
       "confidence": 0.95,
       "severity": "high",
+      "object_lat": 34.0521,
+      "object_lng": -118.2439,
+      "object_bearing_deg": 182.5,
+      "object_range_m": 1200.5,
       "timestamp": "2026-04-08T12:00:00Z"
     }
   ],
   "total": 1,
+  "high_severity_count": 1,
+  "active_sensor_count": 4,
   "next_cursor": "eyJ0aW1lc3RhbXAiOiAiMjAyNi0wNC0wOFQxMjowMDowMCswMDowMCIsICJhbGVydF9pZCI6ICJ1dWlkLWZvci10aHJlYXQtMSJ9",
   "has_more": false
 }
@@ -438,62 +425,20 @@ Returns a `PagedThreats` object containing the list of threats and pagination de
 | :--- | :--- | :--- |
 | `items` | array | An array of `ThreatOut` objects. |
 | `total` | integer | The total number of threats matching the filter criteria (not just the count on the current page). |
+| `high_severity_count` | integer | The count of high-severity threats matching the filter criteria. |
+| `active_sensor_count` | integer | The count of active sensors at the time of the query. |
 | `next_cursor` | string | An opaque cursor string. Send this in the `cursor` query parameter to get the next page. `null` if `has_more` is false. |
 | `has_more` | boolean | `true` if there are more pages of results available. |
 
 ---
 
 
-#### **Get a single threat**
+#### **Get adaptive threat chunk manifest**
 
-Returns a single threat log, identified by its unique ID.
-
-**Method**: `GET`
-**Path**: `/api/v1/threats/{alert_id}`
-
----
-
-##### **Request**
-
-**Path Parameters**
-
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `alert_id` | string | The unique identifier of the threat to retrieve. |
-
----
-
-##### **Response**
-
-**Success Response (`200 OK`)**
-
-Returns the full threat object.
-
-```json
-{
-  "alert_id": "uuid-for-threat-1",
-  "sensor_id": "RADAR-001",
-  "sensor_type": "radar",
-  "threat_type": "drone",
-  "confidence": 0.95,
-  "severity": "high",
-  "timestamp": "2026-04-08T12:00:00Z"
-}
-```
-
-**Error Responses**
-
-*   `404 Not Found`: Returned if no threat with the specified `alert_id` exists.
-
----
-
-
-#### **Get threat summary**
-
-Returns a high-level summary of threat statistics, including the total number of threats and a count of high-severity threats.
+Returns adaptive chunk boundaries for the last 12 hours based on threat density.
 
 **Method**: `GET`
-**Path**: `/api/v1/threats/summary`
+**Path**: `/api/v1/threats/manifest`
 
 ---
 
@@ -508,20 +453,82 @@ This endpoint does not require any query parameters or a request body.
 **Success Response (`200 OK`)**
 
 ```json
+[
+  {
+    "chunk_id": "chunk_001",
+    "start_time": "2026-04-08T10:00:00Z",
+    "end_time": "2026-04-08T10:30:00Z",
+    "threat_count": 12,
+    "label": "medium"
+  }
+]
+```
+
+---
+
+
+#### **Get threats for a chunk**
+
+Returns the threats within a specific manifest chunk, with pagination support.
+
+**Method**: `GET`
+**Path**: `/api/v1/threats/chunk/{chunk_id}`
+
+---
+
+##### **Request**
+
+**Path Parameters**
+
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `chunk_id` | string | The chunk identifier from the manifest. |
+
+**Query Parameters**
+
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `cursor` | string | The `next_cursor` value from a previous response to fetch the next page. |
+| `page_size` | integer | The number of items to return per page. Defaults to `5000` (min 1, max 5000). |
+
+---
+
+##### **Response**
+
+**Success Response (`200 OK`)**
+
+```json
 {
-  "total_threats": 125,
-  "high_severity_threats": 15,
-  "active_sensors_with_threats": 4
+  "chunk_id": "chunk_001",
+  "start_time": "2026-04-08T10:00:00Z",
+  "end_time": "2026-04-08T10:30:00Z",
+  "threat_count": 12,
+  "items": [
+    {
+      "alert_id": "uuid-for-threat-1",
+      "sensor_id": "RADAR-001",
+      "sensor_type": "radar",
+      "track_id": "track-9",
+      "object_type": "drone",
+      "object_state": "tracking",
+      "threat_type": "drone",
+      "confidence": 0.95,
+      "severity": "high",
+      "object_lat": 34.0521,
+      "object_lng": -118.2439,
+      "object_bearing_deg": 182.5,
+      "object_range_m": 1200.5,
+      "timestamp": "2026-04-08T12:00:00Z"
+    }
+  ],
+  "next_cursor": null,
+  "has_more": false
 }
 ```
 
-**Response Body Fields**
+**Error Responses**
 
-| Field | Type | Description |
-| :--- | :--- | :--- |
-| `total_threats` | integer | The total number of threats recorded in the system. |
-| `high_severity_threats` | integer | The count of threats marked with `high` severity. |
-| `active_sensors_with_threats` | integer | The number of `active` sensors that have detected at least one threat. |
+*   `404 Not Found`: Returned if the specified `chunk_id` does not exist.
 
 ---
 
@@ -548,10 +555,10 @@ All parameters are optional and are used to filter the data before aggregation.
 | `bucket_by` | string | `hour` | The time interval to group results by. Options: `minute`, `hour`, `day`. |
 | `from_dt` | string | (None) | ISO 8601 UTC timestamp to start the time range filter. |
 | `to_dt` | string | (None) | ISO 8601 UTC timestamp to end the time range filter. |
-| `location` | string | (None) | Filter by a specific sensor location (e.g., "Main Gate"). |
-| `sensor_type` | string | (None) | Filter by sensor type (`radar` or `lidar`). |
-| `severity` | string | (None) | Filter by severity level (`low`, `med`, `high`). |
-| `threat_type` | string | (None) | Filter by a specific threat type (e.g., `drone`). |
+| `location` | array[string] | (None) | Filter by one or more sensor locations (e.g., "Main Gate"). |
+| `sensor_type` | array[string] | (None) | Filter by one or more sensor types (`radar` or `lidar`). |
+| `severity` | array[string] | (None) | Filter by one or more severity levels (`low`, `med`, `high`). |
+| `threat_type` | array[string] | (None) | Filter by one or more threat types (e.g., `drone`). |
 
 ---
 
@@ -603,10 +610,10 @@ All parameters are optional and are used to filter the data before aggregation.
 | :--- | :--- | :--- |
 | `from_dt` | string | ISO 8601 UTC timestamp to start the time range filter. |
 | `to_dt` | string | ISO 8601 UTC timestamp to end the time range filter. |
-| `location` | string | Filter by a specific sensor location. |
-| `sensor_type` | string | Filter by sensor type (`radar` or `lidar`). |
-| `severity` | string | Filter by severity level (`low`, `med`, `high`). |
-| `threat_type` | string | Filter by a specific threat type. |
+| `location` | array[string] | Filter by one or more sensor locations. |
+| `sensor_type` | array[string] | Filter by one or more sensor types (`radar` or `lidar`). |
+| `severity` | array[string] | Filter by one or more severity levels (`low`, `med`, `high`). |
+| `threat_type` | array[string] | Filter by one or more threat types. |
 
 ---
 
@@ -668,18 +675,15 @@ This endpoint supports the same optional filtering parameters as the other analy
   "data": [
     {
       "severity": "high",
-      "count": 10,
-      "percentage": 23.8
+      "count": 10
     },
     {
       "severity": "med",
-      "count": 15,
-      "percentage": 35.7
+      "count": 15
     },
     {
       "severity": "low",
-      "count": 17,
-      "percentage": 40.5
+      "count": 17
     }
   ]
 }
@@ -690,7 +694,7 @@ This endpoint supports the same optional filtering parameters as the other analy
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `total` | integer | The total number of threats matching the filter criteria. |
-| `data` | array | An array of data points, each containing the `severity` level, the `count` of threats for that level, and the `percentage` of the total. |
+| `data` | array | An array of data points, each containing the `severity` level and the `count` of threats for that level. |
 
 ---
 
@@ -721,18 +725,15 @@ This endpoint supports the same optional filtering parameters as the other analy
   "data": [
     {
       "threat_type": "drone",
-      "count": 25,
-      "percentage": 59.5
+      "count": 25
     },
     {
       "threat_type": "person",
-      "count": 10,
-      "percentage": 23.8
+      "count": 10
     },
     {
       "threat_type": "vehicle",
-      "count": 7,
-      "percentage": 16.7
+      "count": 7
     }
   ]
 }
@@ -743,11 +744,11 @@ This endpoint supports the same optional filtering parameters as the other analy
 | Field | Type | Description |
 | :--- | :--- | :--- |
 | `total` | integer | The total number of threats matching the filter criteria. |
-| `data` | array | An array of data points, each containing the `threat_type`, the `count` of threats for that type, and the `percentage` of the total. |
+| `data` | array | An array of data points, each containing the `threat_type` and the `count` of threats for that type. |
 
 ---
 
-### Users
+### Users (Not in use currently)
 
 #### **Create a user**
 
@@ -841,6 +842,63 @@ Returns the user object, safely excluding the password.
 
 ---
 
+#### **Update a user**
+
+Updates a user's profile information.
+
+**Method**: `PUT`
+**Path**: `/api/v1/users/{user_id}`
+
+---
+
+##### **Request**
+
+**Path Parameters**
+
+| Parameter | Type | Description |
+| :--- | :--- | :--- |
+| `user_id` | string | The unique identifier of the user to update. |
+
+**Request Body (`application/json`)**
+
+```json
+{
+  "username": "newusername",
+  "email": "newadmin@example.com"
+}
+```
+
+**Request Body Fields**
+
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `username` | string | No | The user's new username. |
+| `email` | string | No | The user's new email address. |
+
+---
+
+##### **Response**
+
+**Success Response (`200 OK`)**
+
+Returns the updated user object, safely excluding the password.
+
+```json
+{
+  "user_id": "uuid-for-existing-user",
+  "username": "newusername",
+  "email": "newadmin@example.com",
+  "role": "admin"
+}
+```
+
+**Error Responses**
+
+*   `404 Not Found`: Returned if no user with the specified `user_id` exists.
+*   `422 Unprocessable Entity`: Returned if the request body fails validation.
+
+---
+
 #### **Change password**
 
 Changes the password for an existing user. This endpoint requires the user's current password for verification.
@@ -905,6 +963,8 @@ The backend uses a WebSocket connection at `/ws` to push real-time events to con
 }
 ```
 
+The server also sends a plain-text `ping` heartbeat every 30 seconds.
+
 ---
 
 #### **`CONNECTION_CONFIRMED`**
@@ -925,39 +985,26 @@ The backend uses a WebSocket connection at `/ws` to push real-time events to con
 
 *   **When**: When the `push_alert` method in the `ThreatService` is called, which happens when a new threat is processed by the system.
 *   **Purpose**: To notify all clients of a new, real-time threat detection.
-*   **Payload**: The payload is a full `ThreatOut` object.
+*   **Payload**: The payload includes threat details in the frontend format.
     ```json
     {
       "alert_id": "uuid-for-new-threat",
       "sensor_id": "RADAR-001",
       "sensor_type": "radar",
+      "track_id": "track-9",
+      "object_type": "drone",
+      "object_state": "tracking",
       "threat_type": "drone",
-      "confidence": 0.98,
       "severity": "high",
+      "object_lat": 34.0521,
+      "object_lng": -118.2439,
+      "object_bearing_deg": 182.5,
+      "object_range_m": 1200.5,
       "timestamp": "2026-04-08T20:30:00Z"
     }
     ```
 
 ---
-
-#### **`SENSOR_UPDATE`**
-
-*   **When**: When a sensor's status changes (e.g., from `inactive` to `active`). This is triggered by the ingestion service when it receives a new ping from a sensor.
-*   **Purpose**: To allow clients to update the status of sensors on a live map or dashboard.
-*   **Payload**: The payload is a full `SensorOut` object.
-    ```json
-    {
-      "sensor_id": "RADAR-001",
-      "sensor_type": "radar",
-      "status": "active",
-      "lat": 34.0522,
-      "lng": -118.2437,
-      "location": "Main Gate",
-      "coverage_radius_m": 100.0,
-      "last_ping": "2026-04-08T20:30:00Z",
-      "created_at": "2026-04-01T12:00:00Z"
-    }
-    ```
 *(Note: Based on my analysis, `trajectory_update` and `alert_acknowledged` events are not currently implemented in the backend services.)*
 
 ---

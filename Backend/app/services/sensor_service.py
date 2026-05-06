@@ -4,8 +4,9 @@ import logging
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
+from app.schemas import sensor
 from app.models.sensor import Sensor, SensorStatus
 from app.schemas.sensor import SensorCreate, SensorOut, SensorSummaryOut, SensorUpdate
 
@@ -100,20 +101,12 @@ class SensorService:
         logger.debug(f"Current sensor state: lat={sensor.lat}, lng={sensor.lng}, location={sensor.location}")
         
         # Build update data
-        update_dict = {}
-        if data.lat is not None:
-            update_dict["lat"] = data.lat
-        if data.lng is not None:
-            update_dict["lng"] = data.lng
-        if data.location is not None:
-            update_dict["location"] = data.location
-        if data.coverage_radius_m is not None:
-            update_dict["coverage_radius_m"] = data.coverage_radius_m
+        update_dict = data.model_dump(exclude_unset=True)
 
         logger.debug(f"Update dict: {update_dict}")
 
-        target_lat = data.lat if data.lat is not None else sensor.lat
-        target_lng = data.lng if data.lng is not None else sensor.lng
+        target_lat = update_dict.get("lat", sensor.lat)
+        target_lng = update_dict.get("lng", sensor.lng)
         duplicate_location_result = await db.execute(
             select(Sensor).where(
                 Sensor.sensor_id != sensor_id,
@@ -157,40 +150,19 @@ class SensorService:
 
     #  Sensor summary
     async def get_sensor_summary(self, db: AsyncSession) -> SensorSummaryOut:
-    # Total count
-        total_result = await db.execute(
-            select(func.count(Sensor.sensor_id))
-        )
-        total_count = total_result.scalar_one()
-
-        # Active count
-        active_result = await db.execute(
-            select(func.count(Sensor.sensor_id)).where(
-                Sensor.status == SensorStatus.active
+        result = await db.execute(
+            select(
+                func.count(Sensor.sensor_id),
+                func.sum(case((Sensor.status == SensorStatus.active, 1), else_=0)),
+                func.sum(case((Sensor.status == SensorStatus.inactive, 1), else_=0)),
+                func.sum(case((Sensor.status == SensorStatus.error, 1), else_=0)),
             )
         )
-        active_count = active_result.scalar_one()
-
-        # Inactive count
-        inactive_result = await db.execute(
-            select(func.count(Sensor.sensor_id)).where(
-                Sensor.status == SensorStatus.inactive
-            )
-        )
-        inactive_count = inactive_result.scalar_one()
-
-        # Error count
-        error_result = await db.execute(
-            select(func.count(Sensor.sensor_id)).where(
-                Sensor.status == SensorStatus.error
-            )
-        )
-        error_count = error_result.scalar_one()
-
+        total, active, inactive, error = result.one()
         return SensorSummaryOut(
-            total_count=total_count,
-            active_count=active_count,
-            inactive_count=inactive_count,
-            error_count=error_count,
+            total_count=total or 0,
+            active_count=active or 0,
+            inactive_count=inactive or 0,
+            error_count=error or 0,
         )
 sensor_service = SensorService()
