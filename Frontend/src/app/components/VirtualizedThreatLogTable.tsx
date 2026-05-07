@@ -267,6 +267,7 @@ export function VirtualizedThreatLogTable({
   const requestVersionRef = useRef(0);
   const cacheRef = useRef(new PageCache());
   const loadingPagesRef = useRef(new Set<number>());
+  const hasScrolledRef = useRef(false);
 
   const sensorLocationMap = useMemo(() => buildRowLocationMap(sensorList), [sensorList]);
 
@@ -420,23 +421,24 @@ export function VirtualizedThreatLogTable({
 
   const handleItemsRendered = useCallback(
     ({ visibleStartIndex, visibleStopIndex }: { visibleStartIndex: number; visibleStopIndex: number }) => {
-      if (!isActive || totalThreats === 0) {
+      if (!isActive || totalThreats === 0 || !hasScrolledRef.current) {
         return;
       }
 
       const startPage = getPageIndexForItem(visibleStartIndex);
       const endPage = getPageIndexForItem(visibleStopIndex);
-      const prefetchPage = endPage + 1;
 
       void loadPage(startPage);
       void loadPage(endPage);
-
-      if (prefetchPage * PAGE_SIZE < totalThreats) {
-        void loadPage(prefetchPage);
-      }
     },
     [isActive, loadPage, totalThreats]
   );
+
+  const handleScroll = useCallback(({ scrollOffset }: { scrollOffset: number }) => {
+    if (scrollOffset > 0) {
+      hasScrolledRef.current = true;
+    }
+  }, []);
 
   const itemData: RowData = useMemo(
     () => ({
@@ -516,6 +518,7 @@ export function VirtualizedThreatLogTable({
             itemCount={totalThreats}
             itemSize={ROW_HEIGHT}
             itemData={itemData}
+            onScroll={handleScroll}
             onItemsRendered={handleItemsRendered}
             overscanCount={8}
             width="100%"
