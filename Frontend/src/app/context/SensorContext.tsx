@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { apiGet, apiPost, apiPut, APIError } from '../services/apiClient';
 import { SensorOut } from '../types/api';
+import { mockWS, WSMessage } from '../services/WebSocketClient';
 
 // Request body types for sensor endpoints
 interface SensorCreate {
@@ -81,6 +82,39 @@ export function SensorProvider({ children }: { children: ReactNode }) {
   // Fetch sensors once on mount. Keep refresh manual after that.
   useEffect(() => {
     fetchSensors();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = mockWS.onMessage((message: WSMessage) => {
+      if (message.type !== 'SENSOR_UPDATE') {
+        return;
+      }
+
+      const payload = message.payload ?? {};
+      if (typeof payload.sensor_id !== 'string' || typeof payload.status !== 'string') {
+        return;
+      }
+
+      setSensorList((prev) => {
+        let changed = false;
+        const next = prev.map((sensor) => {
+          if (sensor.sensor_id !== payload.sensor_id) {
+            return sensor;
+          }
+          if (sensor.status === payload.status) {
+            return sensor;
+          }
+          changed = true;
+          return { ...sensor, status: payload.status };
+        });
+
+        return changed ? next : prev;
+      });
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   return (

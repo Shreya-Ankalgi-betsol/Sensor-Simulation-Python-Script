@@ -405,7 +405,7 @@ export function Dashboard() {
     () => sensorList.filter((sensor) => sensor.status?.toLowerCase() === 'active').length,
     [sensorList]
   );
-  const displayedSensorCount = activeSensorCount > 0 ? activeSensorCount : sensorList.length;
+  const displayedSensorCount = activeSensorCount;
 
   return (
     <div className="relative h-[calc(100vh-5rem)] min-h-0 overflow-hidden p-4 lg:p-6">

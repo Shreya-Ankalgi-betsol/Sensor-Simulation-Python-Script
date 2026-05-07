@@ -11,6 +11,7 @@ from app.models.sensor_reading import LidarReading, RadarReading, ReadingStatus
 from app.models.threat_log import ThreatLog, ThreatSeverity
 from app.schemas.ingest import SensorIngestPayload, SensorIngestResponse
 from app.services.threat_service import threat_service
+from app.services.ws_session_manager import session_manager
 
 
 class IngestionService:
@@ -70,12 +71,25 @@ class IngestionService:
                 }
                 await threat_service.push_alert(alert_data, db)
 
+            previous_status = sensor.status
             sensor.last_ping = server_now
             sensor.status = SensorStatus.active
 
-            await self._mark_stale_sensors_inactive(db)
+            stale_updates = await self._mark_stale_sensors_inactive(db)
             await db.flush()
             await db.commit()
+
+            if previous_status != sensor.status:
+                await session_manager.broadcast_sensor_update(
+                    sensor.sensor_id,
+                    sensor.status.value,
+                )
+
+            for stale_sensor in stale_updates:
+                await session_manager.broadcast_sensor_update(
+                    stale_sensor.sensor_id,
+                    stale_sensor.status.value,
+                )
 
             # Log database saves
             log_data_saved(
@@ -101,12 +115,29 @@ class IngestionService:
                 timestamp=payload.timestamp,
             )
         except Exception:
+            previous_status = sensor.status
             sensor.status = SensorStatus.error
             await db.flush()
+            if previous_status != sensor.status:
+                await session_manager.broadcast_sensor_update(
+                    sensor.sensor_id,
+                    sensor.status.value,
+                )
             raise
 
     async def mark_stale_sensors_inactive(self, db: AsyncSession) -> None:
-        await self._mark_stale_sensors_inactive(db)
+        stale_updates = await self._mark_stale_sensors_inactive(db)
+        if not stale_updates:
+            return
+
+        await db.flush()
+        await db.commit()
+
+        for sensor in stale_updates:
+            await session_manager.broadcast_sensor_update(
+                sensor.sensor_id,
+                sensor.status.value,
+            )
 
     async def _upsert_sensor(
         self,
@@ -216,7 +247,7 @@ class IngestionService:
 
         return threats
 
-    async def _mark_stale_sensors_inactive(self, db: AsyncSession) -> None:
+    async def _mark_stale_sensors_inactive(self, db: AsyncSession) -> list[Sensor]:
         stale_cutoff = datetime.now(UTC) - self.inactive_after
         stale_query = select(Sensor).where(
             Sensor.last_ping.is_not(None),
@@ -224,8 +255,12 @@ class IngestionService:
             Sensor.status == SensorStatus.active,
         )
         result = await db.execute(stale_query)
+        stale_sensors: list[Sensor] = []
         for sensor in result.scalars().all():
             sensor.status = SensorStatus.inactive
+            stale_sensors.append(sensor)
+
+        return stale_sensors
 
     def _map_severity(self, severity: Any) -> ThreatSeverity:
         value = str(severity or "LOW").upper()

@@ -63,27 +63,24 @@ export function ThreatMap({
     };
 
     sensorList.forEach((sensor) => {
-      const latestThreat = latestThreatBySensor.get(sensor.sensor_id);
-      const recentThreat = latestThreat
-        ? referenceTimeMs - new Date(latestThreat.timestamp).getTime() <= activeWindowMs
-        : false;
-
       if (sensor.status?.toLowerCase() === 'error') {
         counts.error += 1;
       } else if (sensor.status?.toLowerCase() === 'inactive') {
         counts.offline += 1;
-      } else if (recentThreat) {
-        counts.threat += 1;
       } else {
         counts.active += 1;
       }
     });
 
     return counts;
-  }, [sensorList, latestThreatBySensor, referenceTimeMs]);
+  }, [sensorList]);
 
-  const getSensorColor = (status: string, hasRecentThreat: boolean) => {
-    if (hasRecentThreat) {
+  const getSensorColor = (status: string, hasHighThreat: boolean) => {
+    if (status?.toLowerCase() === 'inactive') {
+      return '#64748B';
+    }
+
+    if (hasHighThreat) {
       return '#DC2626';
     }
 
@@ -92,7 +89,6 @@ export function ThreatMap({
         return '#16A34A';
       case 'error':
         return '#DC2626';
-      case 'inactive':
       default:
         return '#64748B';
     }
@@ -252,17 +248,19 @@ export function ThreatMap({
 
     validSensors.forEach((sensor) => {
       const latestThreat = latestThreatBySensor.get(sensor.sensor_id);
-      const hasRecentThreat = Boolean(
-        latestThreat && referenceTimeMs - new Date(latestThreat.timestamp).getTime() <= activeWindowMs
+      const hasHighThreat = Boolean(
+        latestThreat
+          && latestThreat.severity?.toLowerCase() === 'high'
+          && referenceTimeMs - new Date(latestThreat.timestamp).getTime() <= activeWindowMs
       );
-      const color = getSensorColor(sensor.status, hasRecentThreat);
+      const color = getSensorColor(sensor.status, hasHighThreat);
       const key = `${sensor.lat.toFixed(6)},${sensor.lng.toFixed(6)}`;
       const duplicateIndex = seenCoordinates.get(key) ?? 0;
       seenCoordinates.set(key, duplicateIndex + 1);
       const displayPosition = buildDisplayedPosition(sensor, duplicateIndex);
       const isDuplicateCluster = (coordinateGroups.get(key) ?? 0) > 1;
-      const sensorStateLabel = hasRecentThreat
-        ? 'UNDER THREAT'
+      const sensorStateLabel = hasHighThreat
+        ? 'HIGH ALERT'
         : sensor.status?.toUpperCase() || 'UNKNOWN';
       const encodedSensorId = encodeURIComponent(sensor.sensor_id);
 
@@ -275,7 +273,7 @@ export function ThreatMap({
               height: 38px;
               padding: 0 10px;
               border-radius: 9999px;
-              background: ${hasRecentThreat ? 'rgba(255,255,255,0.98)' : '#fff'};
+              background: ${hasHighThreat ? 'rgba(255,255,255,0.98)' : '#fff'};
               border: 3px solid ${color};
               color: ${color};
               display: flex;
@@ -283,12 +281,12 @@ export function ThreatMap({
               justify-content: center;
               font-size: 15px;
               font-weight: 700;
-              box-shadow: ${hasRecentThreat ? '0 0 0 6px rgba(220, 38, 38, 0.14), 0 12px 28px rgba(15, 23, 42, 0.18)' : '0 8px 24px rgba(15, 23, 42, 0.16)'};
+              box-shadow: ${hasHighThreat ? '0 0 0 6px rgba(220, 38, 38, 0.14), 0 12px 28px rgba(15, 23, 42, 0.18)' : '0 8px 24px rgba(15, 23, 42, 0.16)'};
             ">${sensor.sensor_type?.toLowerCase() === 'radar' ? '◉' : '⌖'}</div>
             <div style="
-              background: ${hasRecentThreat ? 'rgba(220,38,38,0.95)' : 'rgba(255,255,255,0.96)'};
-              color: ${hasRecentThreat ? '#fff' : '#0f172a'};
-              border: 1px solid ${hasRecentThreat ? 'rgba(220,38,38,0.35)' : 'rgba(148,163,184,0.45)'};
+              background: ${hasHighThreat ? 'rgba(220,38,38,0.95)' : 'rgba(255,255,255,0.96)'};
+              color: ${hasHighThreat ? '#fff' : '#0f172a'};
+              border: 1px solid ${hasHighThreat ? 'rgba(220,38,38,0.35)' : 'rgba(148,163,184,0.45)'};
               border-radius: 9999px;
               padding: 2px 8px;
               font-size: 11px;
@@ -316,7 +314,7 @@ export function ThreatMap({
           <div style="min-width: 240px; font-family: var(--font-mono); color: #0f172a;">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 8px;">
               <div style="font-size: 16px; font-weight: 700;">${sensor.sensor_id}</div>
-              <div style="padding: 3px 8px; border-radius: 9999px; background: ${hasRecentThreat ? 'rgba(220,38,38,0.12)' : 'rgba(22,163,74,0.12)'}; color: ${color}; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;">${sensorStateLabel}</div>
+              <div style="padding: 3px 8px; border-radius: 9999px; background: ${hasHighThreat ? 'rgba(220,38,38,0.12)' : 'rgba(22,163,74,0.12)'}; color: ${color}; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;">${sensorStateLabel}</div>
             </div>
             <div style="font-size: 13px; margin-bottom: 4px;"><strong>Type:</strong> ${sensor.sensor_type}</div>
             <div style="font-size: 13px; margin-bottom: 4px;"><strong>Location:</strong> ${sensor.location || 'Unknown'}</div>
@@ -359,9 +357,9 @@ export function ThreatMap({
         radius: Math.max(sensor.coverage_radius_m || 50, 25),
         color,
         weight: 1.5,
-        opacity: hasRecentThreat ? 0.55 : 0.35,
+        opacity: hasHighThreat ? 0.55 : 0.35,
         fillColor: color,
-        fillOpacity: hasRecentThreat ? 0.18 : 0.08,
+        fillOpacity: hasHighThreat ? 0.18 : 0.08,
       }).addTo(layerGroup);
 
       bounds.extend(displayPosition);

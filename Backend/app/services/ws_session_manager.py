@@ -93,4 +93,25 @@ class SessionManager:
         for ws in dead:
             self.disconnect(ws)
 
+    async def broadcast_sensor_update(self, sensor_id: str, status: str) -> None:
+        """Broadcast sensor status update to all connected clients."""
+        if not self.active_connections:
+            return
+
+        payload = json.dumps(
+            {"type": "SENSOR_UPDATE", "payload": {"sensor_id": sensor_id, "status": status}},
+            default=str,
+        )
+        dead: list[WebSocket] = []
+
+        for connection in self.active_connections:
+            try:
+                await connection.send_text(payload)
+            except Exception as exc:
+                logger.warning("Sensor status broadcast failed for a client (%s) — removing.", exc)
+                dead.append(connection)
+
+        for ws in dead:
+            self.disconnect(ws)
+
 session_manager = SessionManager()
