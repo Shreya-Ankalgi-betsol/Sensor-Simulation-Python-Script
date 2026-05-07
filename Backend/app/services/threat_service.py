@@ -15,6 +15,7 @@ from app.schemas.threat import (
     ThreatChunkManifestItem,
     ThreatChunkOut,
     ThreatFilter,
+    ThreatFilterOptions,
     ThreatOut,
     ThreatSummaryOut,
 )
@@ -400,6 +401,52 @@ class ThreatService:
             active_sensor_count=active_sensor_count,
             next_cursor=next_cursor,
             has_more=has_more,
+        )
+
+    async def get_filter_options(
+        self, filters: ThreatFilter, db: AsyncSession
+    ) -> ThreatFilterOptions:
+        sensor_query = select(Sensor.sensor_id, Sensor.sensor_type)
+        if filters.sensor_type:
+            sensor_query = sensor_query.where(Sensor.sensor_type.in_(filters.sensor_type))
+        if filters.sensor_id:
+            sensor_query = sensor_query.where(Sensor.sensor_id.in_(filters.sensor_id))
+
+        sensor_result = await db.execute(sensor_query)
+        sensor_rows = sensor_result.all()
+        sensor_ids = sorted({row.sensor_id for row in sensor_rows})
+        sensor_types = sorted({
+            row.sensor_type.value if hasattr(row.sensor_type, "value") else str(row.sensor_type)
+            for row in sensor_rows
+        })
+
+        threat_query = select(ThreatLog.threat_type).distinct()
+        severity_values: list[ThreatSeverity] | None = None
+        if filters.severity:
+            severity_values = [ThreatSeverity(value) for value in filters.severity]
+
+        if filters.sensor_type:
+            threat_query = threat_query.where(ThreatLog.sensor_type.in_(filters.sensor_type))
+        if filters.sensor_id:
+            threat_query = threat_query.where(ThreatLog.sensor_id.in_(filters.sensor_id))
+        if severity_values:
+            threat_query = threat_query.where(ThreatLog.severity.in_(severity_values))
+        if filters.from_dt is not None:
+            threat_query = threat_query.where(ThreatLog.timestamp >= filters.from_dt)
+        if filters.to_dt is not None:
+            threat_query = threat_query.where(ThreatLog.timestamp <= filters.to_dt)
+
+        threat_query = threat_query.order_by(ThreatLog.threat_type.asc())
+        threat_result = await db.execute(threat_query)
+        threat_types = [row.threat_type for row in threat_result.all() if row.threat_type]
+
+        severities = [item.value for item in ThreatSeverity]
+
+        return ThreatFilterOptions(
+            sensor_types=sensor_types,
+            sensor_ids=sensor_ids,
+            threat_types=threat_types,
+            severities=severities,
         )
 
     # Push alert (called by detection engine)

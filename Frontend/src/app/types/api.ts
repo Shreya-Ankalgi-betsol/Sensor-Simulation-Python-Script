@@ -90,6 +90,17 @@ export interface ThreatSummaryOut {
 }
 
 /**
+ * Threat filter options response from backend
+ * Matches backend ThreatFilterOptions schema
+ */
+export interface ThreatFilterOptions {
+  sensor_types: string[]
+  sensor_ids: string[]
+  threat_types: string[]
+  severities: string[]
+}
+
+/**
  * Summary statistics for sensors
  * Matches backend SensorSummaryOut schema
  */

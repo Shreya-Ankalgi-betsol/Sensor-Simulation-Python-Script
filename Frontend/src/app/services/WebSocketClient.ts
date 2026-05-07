@@ -55,8 +55,23 @@ export class WebSocketService {
       }
 
       this.ws.onmessage = (event) => {
+        if (typeof event.data === 'string') {
+          const trimmed = event.data.trim()
+          if (trimmed.toLowerCase() === 'ping') {
+            return
+          }
+          try {
+            const message: WSMessage = JSON.parse(trimmed)
+            console.log('[WebSocket] Message received:', message.type, message.payload)
+            this.emit(message)
+          } catch (error) {
+            console.error('[WebSocket] Failed to parse message:', error)
+          }
+          return
+        }
+
         try {
-          const message: WSMessage = JSON.parse(event.data)
+          const message: WSMessage = JSON.parse(String(event.data))
           console.log('[WebSocket] Message received:', message.type, message.payload)
           this.emit(message)
         } catch (error) {

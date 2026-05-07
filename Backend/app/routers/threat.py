@@ -7,6 +7,7 @@ from app.schemas.threat import (
     ThreatChunkManifestItem,
     ThreatChunkOut,
     ThreatFilter,
+    ThreatFilterOptions,
 )
 from app.services.threat_service import threat_service
 from app.models.threat_log import ThreatSeverity
@@ -66,6 +67,48 @@ async def get_threats(
         page_size=page_size,
     )
     return await threat_service.get_threats(filters, db)
+
+
+@router.get(
+    "/filter-options",
+    response_model=ThreatFilterOptions,
+    summary="Get threat filter options",
+    description=(
+        "Returns distinct filter options for threats, scoped by the provided filters."
+    ),
+)
+async def get_threat_filter_options(
+    sensor_type: list[str] | None = Query(None),
+    sensor_id: list[str] | None = Query(None),
+    threat_type: list[str] | None = Query(None),
+    severity: list[str] | None = Query(None),
+    from_dt: str | None = None,
+    to_dt: str | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> ThreatFilterOptions:
+    if severity:
+        normalized_severity = [str(value).lower() for value in severity]
+        allowed = {item.value for item in ThreatSeverity}
+        invalid = [value for value in normalized_severity if value not in allowed]
+        if invalid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Invalid severity value(s): "
+                    f"{', '.join(invalid)}. Allowed: {', '.join(sorted(allowed))}."
+                ),
+            )
+        severity = normalized_severity
+
+    filters = ThreatFilter(
+        sensor_type=sensor_type,
+        sensor_id=sensor_id,
+        threat_type=threat_type,
+        severity=severity,
+        from_dt=from_dt,
+        to_dt=to_dt,
+    )
+    return await threat_service.get_filter_options(filters, db)
 
 
 @router.get(

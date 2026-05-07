@@ -11,13 +11,16 @@ import { useTimezone } from '../context/TimezoneContext';
 import { useMapNavigation } from '../context/MapNavigationContext';
 import { useSensors } from "../context/SensorContext";
 import { apiGet } from '../services/apiClient';
-import { ThreatLog, ThreatSummaryOut, PagedThreats } from '../types/api';
+import { ThreatLog, ThreatSummaryOut, ThreatFilterOptions } from '../types/api';
 import HeadlessUIDropdown from '../components/HeadlessUIDropdown';
 import CheckboxGroup from '../components/CheckboxGroup';
 import { VirtualizedThreatLogTable } from '../components/VirtualizedThreatLogTable';
 import { NotificationBell } from '../components/NotificationBell';
 import { ThreatDetailsModal } from '../components/ThreatDetailsModal';
+
+type ActiveTab = 'live' | 'logs';
 type ThreatTableProps = {
+  threats: ThreatLog[];
   loading: boolean;
   isLiveTab: boolean;
   scrollRef?: Ref<HTMLDivElement>;
@@ -201,6 +204,7 @@ export function Threats() {
   const [filterSeverities, setFilterSeverities] = useState<string[]>([]);
   const [fromDateTime, setFromDateTime] = useState<Date | null>(null)
   const [toDateTime, setToDateTime] = useState<Date | null>(null)
+  const [availableSensorIds, setAvailableSensorIds] = useState<string[]>([]);
   const [availableThreatTypes, setAvailableThreatTypes] = useState<string[]>([]);
 
   const resetFilters = () => {
@@ -246,27 +250,24 @@ export function Threats() {
     }
   };
 
-  // Fetch all available threat types (independent of filters, or filtered by sensor type)
-  const fetchAvailableThreatTypes = useCallback(async (sensorTypes: string[] = []) => {
+  // Fetch available filter options (scoped by sensor type when selected)
+  const fetchFilterOptions = useCallback(async (sensorTypes: string[] = []) => {
     try {
       const params = new URLSearchParams();
-      params.append("page_size", "200"); // Get enough threats to extract unique types
-      
       // If specific sensor types are selected, filter by them
-      sensorTypes.forEach(type => {
+      sensorTypes.forEach((type) => {
         params.append("sensor_type", type.toLowerCase());
       });
-      
-      const url = `/api/v1/threats?${params.toString()}`;
-      const pagedThreats = await apiGet<PagedThreats>(url);
-      
-      const threatTypes = Array.from(
-        new Set(pagedThreats.items.map(t => t.threat_type).filter(Boolean))
-      ).sort();
-      setAvailableThreatTypes(threatTypes);
+
+      const url = `/api/v1/threats/filter-options?${params.toString()}`;
+      const options = await apiGet<ThreatFilterOptions>(url);
+      setAvailableSensorIds(options.sensor_ids);
+      setAvailableThreatTypes(options.threat_types);
+      return options;
     } catch (err) {
-      console.error('[Threats] Error fetching available threat types:', err);
+      console.error('[Threats] Error fetching filter options:', err);
     }
+    return null;
   }, []);
 
   // Clear initial loading state on mount
@@ -274,10 +275,10 @@ export function Threats() {
     setLoading(false);
   }, []);
 
-  // Fetch all available threat types on mount
+  // Fetch all available filter options on mount
   useEffect(() => {
-    fetchAvailableThreatTypes();
-  }, [fetchAvailableThreatTypes]);
+    fetchFilterOptions();
+  }, [fetchFilterOptions]);
 
   // Prefill sensor filter from query param: /threats?sensor_id=RADAR-1
   useEffect(() => {
@@ -303,20 +304,24 @@ export function Threats() {
 
   // When sensor types change, keep only valid sensor IDs and reset threat types.
   useEffect(() => {
-    setFilterSensorIds((prev) => {
-      if (filterSensorTypes.length === 0) {
-        return prev;
+    let isActive = true;
+
+    const refreshOptions = async () => {
+      const options = await fetchFilterOptions(filterSensorTypes);
+      if (!isActive || !options) {
+        return;
       }
 
-      return prev.filter((sensorId) =>
-        sensorList.some(
-          (sensor) => sensor.sensor_id === sensorId && filterSensorTypes.includes(sensor.sensor_type.toLowerCase())
-        )
-      );
-    });
-    setFilterThreatTypes([]);
-    fetchAvailableThreatTypes(filterSensorTypes);
-  }, [filterSensorTypes, fetchAvailableThreatTypes, sensorList]);
+      setFilterSensorIds((prev) => prev.filter((sensorId) => options.sensor_ids.includes(sensorId)));
+      setFilterThreatTypes([]);
+    };
+
+    refreshOptions();
+
+    return () => {
+      isActive = false;
+    };
+  }, [filterSensorTypes, fetchFilterOptions]);
 
   // Honor global tab requests (e.g., View All from notification bell).
   useEffect(() => {
@@ -458,14 +463,18 @@ export function Threats() {
   };
 
   // Compute available sensor IDs based on selected sensor types
-  const filteredSensorIds = filterSensorTypes.length === 0
-    ? sensorList.map(s => s.sensor_id)
-    : sensorList.filter(s => filterSensorTypes.includes(s.sensor_type.toLowerCase())).map(s => s.sensor_id);
+  const filteredSensorIds = availableSensorIds.length > 0
+    ? availableSensorIds
+    : filterSensorTypes.length === 0
+      ? sensorList.map((s) => s.sensor_id)
+      : sensorList.filter((s) => filterSensorTypes.includes(s.sensor_type.toLowerCase())).map((s) => s.sensor_id);
 
   // Compute available sensors based on selected sensor types
-  const filteredSensors = filterSensorTypes.length === 0
-    ? sensorList
-    : sensorList.filter(s => filterSensorTypes.includes(s.sensor_type.toLowerCase()));
+  const filteredSensors = availableSensorIds.length > 0
+    ? sensorList.filter((sensor) => availableSensorIds.includes(sensor.sensor_id))
+    : filterSensorTypes.length === 0
+      ? sensorList
+      : sensorList.filter((s) => filterSensorTypes.includes(s.sensor_type.toLowerCase()));
 
   // Calculate active sensor count from sensor list
   const activeSensorCount = sensorList.filter(s => s.status === 'active').length;

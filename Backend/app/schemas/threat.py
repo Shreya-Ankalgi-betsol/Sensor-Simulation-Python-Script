@@ -55,6 +55,13 @@ class ThreatFilter(BaseModel):
     page_size: int = 20
     cursor: Optional[str] = None
     offset: Optional[int] = None
+
+
+class ThreatFilterOptions(BaseModel):
+    sensor_types: list[str]
+    sensor_ids: list[str]
+    threat_types: list[str]
+    severities: list[str]
     
 # Summary     
 class ThreatSummaryOut(BaseModel):
