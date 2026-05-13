@@ -1070,32 +1070,6 @@ export function Threats() {
                             />
                           </div>
 
-                          {/* Apply Button */}
-                          <button
-                            onClick={() => {}}
-                            disabled={!fromDateTime || !toDateTime}
-                            className="px-6 py-2.5 rounded transition-all duration-200"
-                            style={{
-                              background: !fromDateTime || !toDateTime ? "#CBD5E1" : "#0284C7",
-                              color: "#FFFFFF",
-                              fontSize: "1.00625rem",
-                              fontWeight: 600,
-                              border: "none",
-                              cursor: !fromDateTime || !toDateTime ? "not-allowed" : "pointer",
-                              opacity: !fromDateTime || !toDateTime ? 0.6 : 1,
-                              padding: "10px 24px",
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!(!fromDateTime || !toDateTime)) {
-                                e.currentTarget.style.background = "#0369A1";
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = !fromDateTime || !toDateTime ? "#CBD5E1" : "#0284C7";
-                            }}
-                          >
-                            APPLY
-                          </button>
                         </div>
                       </div>
                     )}
